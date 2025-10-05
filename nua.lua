@@ -1,6 +1,4 @@
-Here's the complete nua system in Timm style:
 
-```lua
 -- nua.lua : sugar-Lua → plain Lua
 -- 
 -- Limitations:
@@ -121,7 +119,13 @@ fmt = string.format
 sort = |x| -> (table.sort(x), x)
 keys = |t| -> sort({k for k,_ in t if not k:find"^_"})
 
-function o(x) --> Str
+-- decorate-sort-undecorate (Schwartzian transform) 
+-- cant inline decorated (nexted iterators... not trustworthy)
+function keysort(items:LIST[ANY], key:FN) --> LIST[ANY]
+  decorated = {{key(v), v} for _,v in items}
+  return {v[2] for _,v in sort(decorated)}  
+
+function o(x) --> STR
   if type(x) == "number" and x % 1 ~= 0 then return fmt("%.3f", x) end
   if type(x) == "table" then
     return "{" .. cat(#x > 0
@@ -129,7 +133,7 @@ function o(x) --> Str
       or  {fmt(":%s %s", k, o(x[k])) for k in keys(x)}, " ") .. "}" end
   return tostring(x) end
 
-function greet(name:Str="World", excited:Bool=false) --> Str
+function greet(name:STR="World", excited:BOOL=false) --> STR
   return "Hello " .. name .. (excited and "!" or ".") end
 
 function demo(     t,f)
