@@ -14,11 +14,11 @@
 local exps, push = {}, table.insert
 
 local function comp(vars, iter, expr, cond)
-  local t = "(function() local __t={} for "..vars.." "..iter
+  local t = "(function() local __t={}; for "..vars.." "..iter
   if cond then t = t.." do if "..cond.." then push(__t,"..expr
                         ..") end end"
   else         t = t.." do push(__t,"..expr..") end" end
-  return t.." return __t end)()" end
+  return t.."; return __t end)()" end
 
 local rules = {
   -- Strip type annotations (must come first!)
@@ -96,9 +96,9 @@ local function transpile(filepath)
   if #exps>0 then
     push(result, "\nreturn { ")
     for i,n in pairs(exps) do 
-      if i>1 then io.write(", ") end 
-      io.write(n.."="..n) end
-    io.write(" }") end
+      if i>1 then push(result,", ") end 
+      push(result, n.."="..n) end
+    push(result, " }") end
   return table.concat(result, "\n") end
 
 if arg and arg[1] then
@@ -113,95 +113,4 @@ else
       return assert(load(transpile(filepath), "@"..filepath))() end end)
 end
 
--- demo.nua : showcase all nua features
-cat = table.concat
-fmt = string.format
-sort = |x| -> (table.sort(x), x)
-keys = |t| -> sort({k for k,_ in t if not k:find"^_"})
 
--- decorate-sort-undecorate (Schwartzian transform) 
--- cant inline decorated (nexted iterators... not trustworthy)
-function keysort(items:LIST[ANY], key:FN) --> LIST[ANY]
-  decorated = {{key(v), v} for _,v in items}
-  return {v[2] for _,v in sort(decorated)}  
-
-function o(x) --> STR
-  if type(x) == "number" and x % 1 ~= 0 then return fmt("%.3f", x) end
-  if type(x) == "table" then
-    return "{" .. cat(#x > 0
-      and {o(v) for _,v in x}
-      or  {fmt(":%s %s", k, o(x[k])) for k in keys(x)}, " ") .. "}" end
-  return tostring(x) end
-
-function greet(name:STR="World", excited:BOOL=false) --> STR
-  return "Hello " .. name .. (excited and "!" or ".") end
-
-function demo(     t,f)
-  t,f = {}, {}
-  
-  -- Lambda examples with types: |args| -> expr
-  f.double = |x:Num| -> x*2
-  f.add = |a:Num, b:Num| -> a+b
-  f.len = |x:list[Any]| -> #x
-  
-  -- Function with defaults and types
-  t.greeting1 = greet()
-  t.greeting2 = greet("Alice")
-  t.greeting3 = greet("Bob", true)
-  
-  -- Compound assignment operators
-  counter = 0
-  counter += 1
-  counter *= 2
-  
-  -- Default values
-  name ||= "Unknown"
-  
-  -- Nil-safe navigation
-  result = t?.nonexistent?.field
-  
-  -- String interpolation
-  message = "Hello #{name}, count is #{counter}"
-  
-  -- Numeric comprehensions: {expr for x=a,b}
-  t.squares = {x*x for x=1,5}
-  t.evens = {x*2 for x=1,10 if x%2==0}
-  
-  -- Iterator comprehensions: {expr for k,v in t}
-  t.data = {name="Alice", age=30, _private="secret", scores={85,92,78}}
-  t.values = {v for _,v in t.data.scores}
-  t.doubled = {f.double(v) for _,v in t.data.scores}
-  
-  -- Auto-pairs wrapping (no explicit pairs() needed)
-  t.public_keys = {k for k,_ in t.data if not k:find"^_"}
-  
-  -- Filtered comprehensions
-  t.high_scores = {v for _,v in t.data.scores if v>80}
-  
-  -- Nested comprehensions
-  t.matrix = {{i*j for j=1,3} for i=1,3}
-  
-  -- Using utility functions
-  t.all_keys = keys(t.data)
-  t.sorted_scores = sort(t.values)
-  
-  -- Store the new features
-  t.counter = counter
-  t.name = name
-  t.message = message
-  
-  -- Pretty print everything using o()
-  {print(k, o(v)) for k,v in t}
-  
-  return t,f end
-
--- Private function (not exported, starts with _)
-function _helper(x:Num) --> Num
-  return x * 2 end
-
--- Method (not made local, has colon)
-MyClass = {}
-function MyClass:greet(name:Str) --> Str
-  return "Hello, " .. name end
-
-demo()
