@@ -48,12 +48,10 @@ function DATA:new() return new(DATA, {rows={}, cols=nil}) end
 function DATA:clone(  rows) return DATA:new():from({self.cols.names}):from(rows) end
 
 -- -----------------------------------------------------------------------------------
-function DATA:csv(file)
-  csv(file, function(n,row) self:add(row) end); return self end
+function DATA:csv(file) csv(file, function(n,row) self:add(row) end); return self end
 
-function DATA:from(  rows)
-  for _,row in pairs(rows or {}) do self:add(row) end
-  return self end
+function DATA:from(  rows) 
+  for _,r in pairs(rows or {}) do self:add(r) end; return self end
 
 function DATA:add(row) 
   if self.cols then push(self.rows, self.cols:add(row)) 
