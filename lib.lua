@@ -32,25 +32,28 @@ function l.reduce(t, fn, init,    acc)
 
 function l.max(t, fn)
   return l.reduce(t, function(acc, k, v,      fv)
-    fv = (fn or same)(v)
-    return fv > (acc[2] or -math.huge) and {k, fv} or acc end, {}) end
+    fv = (fn or l.same)(v)
+    return fv > (acc[2] or -math.huge) and {k, fv} or acc end, {})[2] end
 
 function l.sum(t, fn)
-  return l.reduce(t, function(acc, k, v) return acc + (fn or same)(v) end, 0) end
+  return l.reduce(t, function(acc, k, v) return acc + (fn or l.same)(v) end, 0) end
 
 function l.coerce(s,     fn)   
   fn = function(s) return s=="true" and true or s ~= "false" and s end
   return math.tointeger(s) or tonumber(s) or fn(l.trim(s)) end
 
+function l.cells(s,    u)
+  u = {}; for s1 in s:gmatch"([^,]+)" do u[#u+1]=l.coerce(s1) end; return u end
+
 function l.csv(file,fun,      src,s,cells,n)
   src = io.input(file)
   while true do
     s = io.read()
-    if s then fun(cells(s)) else return io.close(src) end end end
+    if s then fun(l.cells(s)) else return io.close(src) end end end
 
 function l.o(x,    ok,two)
-  _out = function(_,s) if not tostring(s):find"^_" then return l.fmt(":%s %s",k,v) end end
-  if type(x) == "number" then return l.fmt(x%1==0 and "%g" or ".3f",x) end
+  _out = function(k,v) if not tostring(s):find"^_" then return l.fmt(":%s %s",k,v) end end
+  if type(x) == "number" then return l.fmt((x%1)==0 and "%g" or "%.3f", x) end
   if type(x) ~= "table"  then return tostring(x) end
   return "{"..table.concat(#x>0 and l.map(x,l.o) or l.sort(l.kap(x,_out))," ").."}" end
 
