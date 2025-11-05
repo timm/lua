@@ -18,6 +18,7 @@ PROMPT_COMMAND='PS1="${bold}${col1}$(basename "$(dirname "$PWD")")/$(basename "$
 alias ls="\ls --color"
 alias reload="source '$Here/ell' && echo ✅"
 alias grep='grep --color=auto'
+alias tree='tree -C -F'
 
 vi() {
   nvim --clean \
