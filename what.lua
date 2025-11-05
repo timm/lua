@@ -1,8 +1,7 @@
 #!/usr/bin/env lua
 l=require"lib"
-local \
-     coerce,  csv,  kap,  map,  new,  o,  oo,  push,  sort,  trim =
-   l.coerce,l.csv,l.kap,l.map,l.new,l.o,l.oo,l.push,l.sort,l.trim
+local coerce,  csv,  kap,  map,  new,  o,  oo,  push,  sort,  trim =
+    l.coerce,l.csv,l.kap,l.map,l.new,l.o,l.oo,l.push,l.sort,l.trim
 
 -------------------------------------------------------------------------------
 local NUM,SYM,COLS,DATA = {},{},{},{}
@@ -24,7 +23,7 @@ function Cols(names,   x,y,col,cols)
     col = push(cols, (s:find"^[A-Z]" and Num or Sym)(at,s)) 
     if not s:find"X$" then 
       push(s:find"[+-!]$" and y or x, col) end end
-  return new(COLS,{x=x, y=y, all=cols, names=names} end
+  return new(COLS,{x=x, y=y, all=cols, names=names}) end
 
 function Data() 
   return new(DATA, {rows={}, cols=nil}) end
@@ -56,3 +55,9 @@ function NUM.add(i,v,    d)
     if x > i.hi then i.hi = x end
     if x < i.lo then i.lo = x end end 
   return v end 
+
+-------------------------------------------------------------------------------
+return {NUM=NUM, SYM=SYM, COLS=COLS, DATA=DATA,
+        Num=Num, Sym=Sym, Cols=Cols, Data=Data}
+
+
