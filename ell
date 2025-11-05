@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# Copyright (c) 2025 Tim Menzies, MIT License
+# https://opensource.org/licenses/MIT
+
+export BASH_SILENCE_DEPRECATION_WARNING=1
+export PATH="$Here:$PATH"
+export HISTSIZE=10000
+export HISTFILESIZE=20000
+export HISTCONTROL=ignoredups:erasedups
+
+Here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+branch() { git branch 2>/dev/null | awk '/^\*/ {print $2}'; }
+dirty() { [[ -n $(git status -s 2>/dev/null) ]] && echo "*"; }
+bold=$(tput bold) col0=$(tput sgr0) col1=$(tput setaf 6) col2=$(tput setaf 3)
+
+PROMPT_COMMAND='PS1="${bold}${col1}$(basename "$(dirname "$PWD")")/$(basename "$PWD")${col0} ${col2}$(branch)$(dirty)${col0} ▶ "'
+
+alias ls="\ls --color"
+alias reload="source '$Here/ell' && echo ✅"
+alias grep='grep --color=auto'
+
+vi() {
+  nvim --clean \
+       --cmd "let g:netrw_banner=0           | let g:netrw_liststyle=3 \
+              | let g:netrw_browse_split=4   | let g:netrw_winsize=15"  \
+       --cmd "set number relativenumber cursorline mouse=a \
+              clipboard=unnamedplus ignorecase smartcase"   \
+       --cmd "set statusline=%#StatusLine#\ ▶\ %f\ %m%r%=%y\ ❖\ %l:%c\ ❖\ %p%%\ " \
+       --cmd "set expandtab tabstop=2 shiftwidth=2 splitright splitbelow"          \
+       --cmd "set undofile undodir=~/.vim/undo"                                     \
+       --cmd "nnoremap Q :quitall<CR>" \
+       --cmd "colorscheme zaibatsu"     \
+       --cmd "set laststatus=2"          \
+       "$@"
+}
+
+hi() { 
+  clear
+  echo "${col1}"
+  cat<<'EOF'
+  ██╗      ██╗   ██╗  █████╗ 
+  ██║      ██║   ██║ ██╔══██╗
+  ██║      ██║   ██║ ███████║
+  ██║      ██║   ██║ ██╔══██║ Simple code, 
+  ███████╗ ╚██████╔╝ ██║  ██║   no ceremony.
+  ╚══════╝  ╚═════╝  ╚═╝  ╚═╝  
+EOF
+  echo "${col0}"
+}
+
+inst() {
+  local m=""
+  for p in $1; do command -v "$p" &>/dev/null || m+="$p "; done
+  [ "$m" ] && case "$(uname -s)" in
+    Darwin*) brew install $m ;;
+    Linux*)  sudo apt install -y $m ;;
+    MINGW*)  winget install $m ;;
+  esac
+}
+
+# only run slow or verbose command at initial startup, not on reload
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  inst git nvim gawk tree
+  hi
+  exec bash --init-file "${BASH_SOURCE[0]}" -i
+fi
