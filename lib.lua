@@ -49,11 +49,10 @@ function l.csv(file,fun,      src,s,cells,n)
     if s then fun(cells(s)) else return io.close(src) end end end
 
 function l.o(x,    ok,two)
-  ok   = function(s) return not tostring(s):find"^_" end
-  two  = function(k,v) if ok(k) then return l.fmt(":%s %s",k,v) end end
+  _out = function(_,s) if not tostring(s):find"^_" then return l.fmt(":%s %s",k,v) end end
   if type(x) == "number" then return l.fmt(x%1==0 and "%g" or ".3f",x) end
   if type(x) ~= "table"  then return tostring(x) end
-  return "{"..table.concat(#x>0 and l.map(x,l.o) or l.sort(l.kap(x,two))," ").."}" end
+  return "{"..table.concat(#x>0 and l.map(x,l.o) or l.sort(l.kap(x,_out))," ").."}" end
 
 function l.oo(x) print(l.o(x)); return x end
 
