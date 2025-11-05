@@ -2,9 +2,7 @@
 # Copyright (c) 2025 Tim Menzies, MIT License
 # https://opensource.org/licenses/MIT
 #------------------------------------------------------
-
 SHELL=/bin/bash
-export PATH := $(CURDIR):$(PATH)
 .SILENT:
 .PHONY: help egs ok eg-nbc eg-abcd eg-soybean eg-globals pull push
 
@@ -18,8 +16,9 @@ help: ## show this help
 sh: ## run a customized shell
 	sh ell
 
-pull: ## update from main
-	git pull
-
 push: ## commit to main
-	git commit -am saving;  git push; git status
+	echo -en "Why this push? " 
+	read x ; git commit -am "$$x" ;  git push ; git status
+
+pull: ## commit to main
+	git pull
