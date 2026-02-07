@@ -61,7 +61,7 @@ inst() {
 
 # only run slow or verbose command at initial startup, not on reload
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-  inst git nvim gawk tree
+  inst git nvim gawk tree love
   hi
   exec bash --init-file "${BASH_SOURCE[0]}" -i
 fi
