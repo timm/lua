@@ -8,14 +8,13 @@ function trim(s) return s:match"^%s*(.-)%s*$" end
 function cast(s) 
   return s=="true" or s~="false" and (math.tointeger(s) or tonumber(s) or s) end
 
-function s2row(s,c,    t) 
-  t={}; for x in s:gmatch("[^"..c.."]+") do t[#t+1]=cast(trim(x)) end return t end
-
 function csv(file,    src)
   src = assert(io.open(file))
-  return function(s)
+  return function(      s,t)
     s=src:read()
-    if s then return casts(s) else src:close() end end end
+    if s then 
+      t={}; for x in s:gmatch("[^"..c.."]+") do t[#t+1]=cast(trim(x)) end
+      return t end end end 
 
 function sort(t,fn) table.sort(t,fn) return t end
 function map(t,f, u) u={}; for i,x in ipairs(t) do u[i]=f(x) end; return u end
@@ -26,7 +25,7 @@ function rat(x,  u)
   if math.type(x)=="float" then return string.format("%.2f",x) end
   if type(x)~="table"      then return tostring(x) end
   if #x>0                  then return cat(map(x,rat)) end
-  u={}; for k,v in pairs(x) do u[#u+1]=string.format("%s=%s",k,rat(v)) end
+  u={}; for k,v in pairs(x) do u[#u+1] = string.format("%s=%s",k,rat(v)) end
   return cat(sort(u)) end
 
 local Num,Sym,Cols,Data
