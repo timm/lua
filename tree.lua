@@ -21,6 +21,9 @@ the = {
 local floor,max,min,abs,log = math.floor,math.max,math.min,math.abs,math.log
 local rand,BIG = math.random, 1E32
 
+local NUM, SYM, COLS, DATA, TREE = {}, {}, {}, {}, {}
+local Num, Sym, Data, Tree, Cols
+
 -- lib ----------------------------------------------------------------------------------
 local new,push,sort,map,sum,median,trim,cat,rat,thing,things,shuffle,adds,mink,bisect
 
@@ -98,12 +101,9 @@ function bestRanks(dict,    all, num_all, best)
   return best end
 
 -- structs ------------------------------------------------------------------------------
-local NUM, SYM, COLS, DATA, TREE = {}, {}, {}, {}, {}
-local Num, Sym, Data, Tree, Cols
-
 function Tree(score) return new(TREE, {score=score}) end
 function Sym(s, at)  return new(SYM, {txt=s or "", at=at or 0, has={}, most=0, n=0}) end
-function Num(s, at)  return new(NUM, {txt=s or "", at=at or 0, has={}, _ok=false, n=0,
+function Num(s, at)  return new(NUM, {txt=s or "", at=at or 0, has={}, ok=false, n=0,
                                      goal=s and s:match"-$" and 0 or 1}) end
 
 function Cols(names,    x, y, all, col)
@@ -120,7 +120,7 @@ function Data(src,     d)
   return d end 
 
 function NUM.add(i,v) 
-  if v~="?" then i.n=i.n+1; push(i.has,v); i._ok=false end; return v end
+  if v~="?" then i.n=i.n+1; push(i.has,v); i.ok=false end; return v end
 function SYM.add(i,v)
   if v~="?" then i.n=i.n+1; i.has[v]=(i.has[v] or 0)+1
     if i.has[v]>i.most then i.most,i.mode=i.has[v],v end end; return v end
@@ -129,7 +129,7 @@ function COLS.add(i,row)
 function DATA.add(i,row)
   if i.cols then i.cols:add(push(i.rows,row)) else i.cols=Cols(row) end end
 
-function NUM.ok(i)     if not i._ok then sort(i.has) end; i._ok=true; return i end
+function NUM.ok(i)     if not i.ok then sort(i.has) end; i.ok=true; return i end
 function NUM.mid(i)    return median(i:ok().has) end
 function SYM.mid(i)    return i.mode end
 function DATA.mid(i)   return map(i.cols.all, function(c) return c:mid() end) end
