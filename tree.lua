@@ -24,9 +24,124 @@ local rand,BIG = math.random, 1E32
 local NUM, SYM, COLS, DATA, TREE = {}, {}, {}, {}, {}
 local Num, Sym, Data, Tree, Cols
 
--- lib ----------------------------------------------------------------------------------
 local new,push,sort,map,sum,median,trim,cat,rat,thing,things,shuffle,adds,mink,bisect
 
+-- structs ------------------------------------------------------------------------------
+function Tree(score) return new(TREE, {score=score}) end
+function Sym(s, at)  return new(SYM, {txt=s or "", at=at or 0, has={}, most=0, n=0}) end
+function Num(s, at)  return new(NUM, {txt=s or "", at=at or 0, has={}, _ok=false, n=0,
+                                     goal=s and s:match"-$" and 0 or 1}) end
+
+function Cols(names,    x, y, all, col)
+  x, y, all = {}, {}, {}
+  for at, s in ipairs(names) do
+    col = push(all, (s:match"^[A-Z]" and Num or Sym)(s, at))
+    if not s:match"X$" then push(s:match"[%+%-!]$" and y or x, col) end end
+  return new(COLS, {x=x, y=y, all=all, names=names}) end
+
+function Data(src,     d) 
+  d = new(DATA, {rows={}, cols=nil}) 
+  if type(src)=="string" then for row in things(src) do d:add(row) end 
+  else for _, row in ipairs(src or {}) do d:add(row) end end
+  return d end 
+
+function DATA.clone(i,rows) return adds(rows or {}, Data({i.cols.names})) end
+
+-- update ------------------------------------------------------------------------------
+function NUM.add(i,v) 
+  if v~="?" then i.n=i.n+1; push(i.has,v); i._ok=false end; return v end
+function SYM.add(i,v)
+  if v~="?" then i.n=i.n+1; i.has[v]=(i.has[v] or 0)+1
+    if i.has[v]>i.most then i.most,i.mode=i.has[v],v end end; return v end
+function COLS.add(i,row) 
+  for _,c in ipairs(i.all) do c:add(row[c.at]) end; return row end
+function DATA.add(i,row)
+  if i.cols then i.cols:add(push(i.rows,row)) else i.cols=Cols(row) end end
+
+-- query ------------------------------------------------------------------------------
+function NUM.ok(i)   if not i._ok then sort(i.has) end; i._ok=true; return i end
+function NUM.mid(i)  return median(i:ok().has) end
+function SYM.mid(i)  return i.mode end
+function DATA.mid(i) return map(i.cols.all, function(c) return c:mid() end) end
+
+function NUM.spread(i,     t, n)
+  t, n = i:ok().has, #i.has; if n < 2 then return 0 end
+  return (t[max(1, floor(.9*n))] - t[max(1, floor(.1*n))]) / 2.56 end
+function SYM.spread(i)
+  return -sum(i.has, function(_, v) return (v/i.n) * log(v/i.n, 2) end) end
+
+function NUM.norm(i,v)
+  if v=="?" then return v end; if #i:ok().has<2 then return 0 end
+  return max(0, min(1, (v-i.has[1]) / (i.has[#i.has]-i.has[1]))) end
+
+function DATA.disty(i,r,     fn)
+  fn = function(c) return abs(c:norm(r[c.at]) - c.goal) end
+  return mink(map(i.cols.y, fn)) end
+
+-- tree ---------------------------------------------------------------------------------
+function TREE.build(i, d, rows,     mid, best, bestW, w)
+  mid = d:clone(rows):mid(); i.mids = {}
+  i.y = adds(map(rows, function(r) return i.score(r) end))
+  for _, c in ipairs(d.cols.y) do i.mids[c.txt] = mid[c.at] end
+  if #rows < 2*the.leaf then return i end; best, bestW = nil, BIG
+  for _, col in ipairs(d.cols.x) do
+    for _, sp in ipairs(col:splits(rows)) do
+      w = sum({sp.left, sp.right}, function(_, s)
+            return adds(map(s, function(r) return i.score(r) end)):spread() * #s end)
+      if w < bestW then best = {col=col, cut=sp.cut, left=sp.left, 
+                                right=sp.right}; bestW = w end end end
+  if best then
+    i.col, i.cut, i.at = best.col, best.cut, best.col.at
+    i.left  = Tree(i.score):build(d, best.left) 
+    i.right = Tree(i.score):build(d, best.right)
+  end; return i end
+
+function NUM.leaf(i,cut,v) return v<=cut end
+function SYM.leaf(i,cut,v) return v==cut end
+function TREE.leaf(i,row,     v)
+  if not i.col then return i end; v=row[i.at]
+  if v=="?" then return i.left:leaf(row) end
+  return (i.col:leaf(i.cut,v) and i.left or i.right):leaf(row) end
+
+function TREE.nodes(i, fn, lvl, pre)
+  lvl, pre = lvl or 0, pre or ""; fn(i, lvl, pre)
+  if not i.col then return end; local yes, no = i.col:op()
+  local kids = sort({{i.left, yes}, {i.right, no}},
+                    function(a, b) return a[1].y:mid() < b[1].y:mid() end)
+  for _, p in ipairs(kids) do
+    p[1]:nodes(fn, lvl+1, i.col.txt.." "..p[2].." "..rat(i.cut)) end end
+
+function SYM.op(i) return "==", "!=" end
+function NUM.op(i) return "<=", ">"  end
+
+function TREE.show(i)
+  i:nodes(function(n, lvl, pre)
+    local s = lvl > 0 and string.rep("|   ", lvl-1)..pre or ""
+    io.write(string.format("%-"..the.Show.."s ,%4s ,(%3d),  %s\n",
+      s, rat(n.y:mid()), n.y.n, rat(n.mids))) end) end
+
+-- splits -------------------------------------------------------------------------------
+local function step(rows, at, fn,     left, right)
+  left, right = {}, {}
+  for _, r in ipairs(rows) do
+    if r[at]~="?" then push(fn(r[at]) and left or right, r) end end
+  if #left>=the.leaf and #right>=the.leaf then return left, right end end
+
+function NUM.splits(i, rows,     vals, med, l, r)
+  vals = {}; for _, r in ipairs(rows) do if r[i.at]~="?" then push(vals, r[i.at]) end end
+  if #vals < 2 then return {} end; sort(vals); med = vals[floor(#vals/2)+1]
+  l, r = step(rows, i.at, function(v) return v <= med end)
+  return l and {{cut=med, left=l, right=r}} or {} end
+
+function SYM.splits(i, rows,     seen, out, l, r)
+  seen, out = {}, {}
+  for _, row in ipairs(rows) do
+    local v = row[i.at]
+    if v~="?" and not seen[v] then seen[v]=true
+      l, r = step(rows, i.at, function(x) return x == v end)
+      if l then push(out, {cut=v, left=l, right=r}) end end end; return out end
+
+-- lib ----------------------------------------------------------------------------------
 function new(kl,obj)     kl.__index=kl; return setmetatable(obj,kl) end
 function push(t,x)       t[#t+1]=x; return x end
 function sort(t,fn)      table.sort(t,fn); return t end
@@ -100,115 +215,6 @@ function bestRanks(dict,    all, num_all, best)
     else break end end
   return best end
 
--- structs ------------------------------------------------------------------------------
-function Tree(score) return new(TREE, {score=score}) end
-function Sym(s, at)  return new(SYM, {txt=s or "", at=at or 0, has={}, most=0, n=0}) end
-function Num(s, at)  return new(NUM, {txt=s or "", at=at or 0, has={}, ok=false, n=0,
-                                     goal=s and s:match"-$" and 0 or 1}) end
-
-function Cols(names,    x, y, all, col)
-  x, y, all = {}, {}, {}
-  for at, s in ipairs(names) do
-    col = push(all, (s:match"^[A-Z]" and Num or Sym)(s, at))
-    if not s:match"X$" then push(s:match"[%+%-!]$" and y or x, col) end end
-  return new(COLS, {x=x, y=y, all=all, names=names}) end
-
-function Data(src,     d) 
-  d = new(DATA, {rows={}, cols=nil}) 
-  if type(src)=="string" then for row in things(src) do d:add(row) end 
-  else for _, row in ipairs(src or {}) do d:add(row) end end
-  return d end 
-
-function NUM.add(i,v) 
-  if v~="?" then i.n=i.n+1; push(i.has,v); i.ok=false end; return v end
-function SYM.add(i,v)
-  if v~="?" then i.n=i.n+1; i.has[v]=(i.has[v] or 0)+1
-    if i.has[v]>i.most then i.most,i.mode=i.has[v],v end end; return v end
-function COLS.add(i,row) 
-  for _,c in ipairs(i.all) do c:add(row[c.at]) end; return row end
-function DATA.add(i,row)
-  if i.cols then i.cols:add(push(i.rows,row)) else i.cols=Cols(row) end end
-
-function NUM.ok(i)     if not i.ok then sort(i.has) end; i.ok=true; return i end
-function NUM.mid(i)    return median(i:ok().has) end
-function SYM.mid(i)    return i.mode end
-function DATA.mid(i)   return map(i.cols.all, function(c) return c:mid() end) end
-function NUM.spread(i,     t, n)
-  t, n = i:ok().has, #i.has; if n < 2 then return 0 end
-  return (t[max(1, floor(.9*n))] - t[max(1, floor(.1*n))]) / 2.56 end
-function SYM.spread(i)
-  return -sum(i.has, function(_, v) return (v/i.n) * log(v/i.n, 2) end) end
-
-function NUM.norm(i,v)
-  if v=="?" then return v end; if #i:ok().has<2 then return 0 end
-  return max(0, min(1, (v-i.has[1]) / (i.has[#i.has]-i.has[1]))) end
-function DATA.disty(i,r,     fn)
-  fn = function(c) return abs(c:norm(r[c.at]) - c.goal) end
-  return mink(map(i.cols.y, fn)) end
-function DATA.clone(i,rows) return adds(rows or {}, Data({i.cols.names})) end
-
--- splits -------------------------------------------------------------------------------
-local function step(rows, at, fn,     left, right)
-  left, right = {}, {}
-  for _, r in ipairs(rows) do
-    if r[at]~="?" then push(fn(r[at]) and left or right, r) end end
-  if #left>=the.leaf and #right>=the.leaf then return left, right end end
-
-function NUM.splits(i, rows,     vals, med, l, r)
-  vals = {}; for _, r in ipairs(rows) do if r[i.at]~="?" then push(vals, r[i.at]) end end
-  if #vals < 2 then return {} end; sort(vals); med = vals[floor(#vals/2)+1]
-  l, r = step(rows, i.at, function(v) return v <= med end)
-  return l and {{cut=med, left=l, right=r}} or {} end
-
-function SYM.splits(i, rows,     seen, out, l, r)
-  seen, out = {}, {}
-  for _, row in ipairs(rows) do
-    local v = row[i.at]
-    if v~="?" and not seen[v] then seen[v]=true
-      l, r = step(rows, i.at, function(x) return x == v end)
-      if l then push(out, {cut=v, left=l, right=r}) end end end; return out end
-
--- tree ---------------------------------------------------------------------------------
-function TREE.build(i, d, rows,     mid, best, bestW, w)
-  mid = d:clone(rows):mid(); i.mids = {}
-  i.y = adds(map(rows, function(r) return i.score(r) end))
-  for _, c in ipairs(d.cols.y) do i.mids[c.txt] = mid[c.at] end
-  if #rows < 2*the.leaf then return i end; best, bestW = nil, BIG
-  for _, col in ipairs(d.cols.x) do
-    for _, sp in ipairs(col:splits(rows)) do
-      w = sum({sp.left, sp.right}, function(_, s)
-            return adds(map(s, function(r) return i.score(r) end)):spread() * #s end)
-      if w < bestW then best = {col=col, cut=sp.cut, left=sp.left, 
-                                right=sp.right}; bestW = w end end end
-  if best then
-    i.col, i.cut, i.at = best.col, best.cut, best.col.at
-    i.left, i.right = Tree(i.score):build(d, best.left), Tree(i.score):build(d, best.right)
-  end; return i end
-
-function NUM.leaf(i,cut,v) return v<=cut end
-function SYM.leaf(i,cut,v) return v==cut end
-function TREE.leaf(i,row,     v)
-  if not i.col then return i end; v=row[i.at]
-  if v=="?" then return i.left:leaf(row) end
-  return (i.col:leaf(i.cut,v) and i.left or i.right):leaf(row) end
-
-function TREE.nodes(i, fn, lvl, pre)
-  lvl, pre = lvl or 0, pre or ""; fn(i, lvl, pre)
-  if not i.col then return end; local yes, no = i.col:op()
-  local kids = sort({{i.left, yes}, {i.right, no}},
-                    function(a, b) return a[1].y:mid() < b[1].y:mid() end)
-  for _, p in ipairs(kids) do
-    p[1]:nodes(fn, lvl+1, i.col.txt.." "..p[2].." "..rat(i.cut)) end end
-
-function SYM.op(i) return "==", "!=" end
-function NUM.op(i) return "<=", ">"  end
-
-function TREE.show(i)
-  i:nodes(function(n, lvl, pre)
-    local s = lvl > 0 and string.rep("|   ", lvl-1)..pre or ""
-    io.write(string.format("%-"..the.Show.."s %6s (%3d) %s\n",
-      s, rat(n.y:mid()), n.y.n, rat(n.mids))) end) end
-
 -- eg -----------------------------------------------------------------------------------
 eg = {}
 function eg.data(f,     d, rows, sub)
@@ -236,8 +242,9 @@ local function main(     k, i)
   i = 1; while i <= #arg do
     k = arg[i]:match"^%-%-?(.+)"; i = i + 1
     if k then
+      math.randomseed(the.seed) 
       if eg[k] then eg[k](arg[i]); i = i + 1
-      elseif the[k]~=nil then the[k] = thing(arg[i]); i = i + 1 end end end
-  math.randomseed(the.seed) end
+      elseif the[k]~=nil then the[k] = thing(arg[i]); i = i + 1 end end end end
 
+math.randomseed(the.seed) 
 if arg[0]:match("tree%.lua$") then main() end

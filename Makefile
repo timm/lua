@@ -24,6 +24,7 @@ pull: ## commit to main
 	git pull
 
 Lines=90
+Cols=2
 
 ~/tmp/%.pdf : %.lua Makefile lua.ssh
 	@echo "pdfing : $@ ... "
@@ -31,12 +32,11 @@ Lines=90
 		--line-numbers=1           \
 	  --chars-per-line=$(Lines) \
 		--highlight-level=normal    \
-		--columns 2                  \
+		--columns $(Cols)                  \
 		--borders=no --pro=color      \
 		--right-footer="" --left-footer=""  \
 		--pretty-print=lua.ssh               \
 		--footer="page %p."                   \
-		--portrait \
 		-M letter                              \
 		-o - $< | ps2pdf - $@
 	open $@
