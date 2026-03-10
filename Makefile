@@ -41,3 +41,18 @@ Cols=2
 		-o - $< | ps2pdf - $@
 	open $@
 
+~/tmp/%.pdf : %.jl Makefile julia.ssh
+	@echo "pdfing : $@ ... "
+	@a2ps -Bj --landscape      \
+		--line-numbers=1           \
+	  --chars-per-line=$(Lines) \
+		--highlight-level=normal    \
+		--columns $(Cols)                  \
+		--borders=no --pro=color      \
+		--right-footer="" --left-footer=""  \
+		--pretty-print=julia.ssh               \
+		--footer="page %p."                   \
+		-M letter                              \
+		-o - $< | ps2pdf - $@
+	open $@
+
