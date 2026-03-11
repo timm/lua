@@ -125,9 +125,9 @@ def thing(s: str):
     except: return s
 
 def o(x):
-  if of(x) == float: return f"{x:.2f}"
-  if of(x) == dict:  return "{"+", ".join(f"{k}={o(v)}" for k,v in sorted(x.items()))+"}"
-  if of(x) == list:  return "{"+", ".join(map(o, x))+"}"
+  if of(x)==float: return f"{x:.2f}"
+  if of(x)==dict:  return "{"+", ".join(f"{k}={o(v)}" for k,v in sorted(x.items()))+"}"
+  if of(x)==list:  return "{"+", ".join(map(o, x))+"}"
   return str(x)
 
 def nodes(t: Tree, l: int=0, p: str=""):
@@ -157,5 +157,5 @@ if __name__ == "__main__":
   while args:
     k = re.sub(r"^-+", "", args.pop(0))
     if fn := globals().get(f"eg_{k}"):
-      fn(*[thing(args.pop(0)) for _ in range(fn.__code__.co_argcount)])
+      fn(*[thing(args.pop(0)) for arg in fn.__annotations__])
     elif hasattr(the, k): setattr(the, k, thing(args.pop(0)))
