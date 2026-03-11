@@ -8,13 +8,6 @@ style Julia is
 alphabets are
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_0123456789!"
 
-# Strings and characters
-string do "\"" .. "\"" escapes with "\\"
-string do "\'" .. "\'" escapes with "\\"
-
-# Comments (Julia uses # for single-line comments)
-comment do "#" .. \n
-
 # Core Julia Keywords
 keywords in Keyword are
     "abstract", "baremodule", "begin", "break", "catch", "const",
@@ -24,11 +17,18 @@ keywords in Keyword are
     "struct", "type", "using", "where", "while"
 end keywords
 
-# Built-in Types and Constants
-keywords in Type are
+# Built-in Types and Constants (Must use Keyword_strong, not Type)
+keywords in Keyword_strong are
     "Any", "Array", "Bool", "Dict", "Float16", "Float32", "Float64",
     "Int", "Int32", "Int64", "Matrix", "Nothing", "Set", "String",
     "Tuple", "Vector", "false", "nothing", "true"
 end keywords
+
+# Corrected syntax for strings and comments
+sequences are
+    "#" Comment,
+    C-string,
+    C-char
+end sequences
 
 end style
