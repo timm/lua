@@ -51,7 +51,8 @@ def spread(x):
   if it(x)==Sym: return -sum(v/x.n * math.log2(v/x.n) for v in x.has.values() if v>0)
 
 def norm(n, v):
-  h = ok(n).has; return max(0, min(1, (v-h[0])/(h[-1]-h[0]))) if v!="?" and len(h)>1 else v
+  h = ok(n).has
+  return max(0, min(1, (v-h[0])/(h[-1]-h[0]))) if v!="?" and len(h)>1 else v
 
 def disty(d, r):
   ls = [abs(norm(c, r[c.at]) - c.goal)**the.p for c in d.cols.y]
