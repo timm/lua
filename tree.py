@@ -1,6 +1,7 @@
 #!/usr/bin/env python3 -B
 import math, re, random, sys, bisect
 from types import SimpleNamespace as S
+from typing import Any, Iterable
 
 of = type
 the = S(leaf=3, Budget=50, Show=30, seed=1, p=2, cliffs=0.195, conf=1.36, eps=0.35)
@@ -20,12 +21,19 @@ class Data:
 class Tree:
   def __init__(i, sc): i.sc,i.col,i.cut,i.L,i.R,i.mids,i.y = sc,0,0,None,None,{},Num()
 
-def adds(src: list, it=None):
+Qty  = int | float
+Atom = str | bool | Qty
+Row  = list[Atom]
+Rows = list[Row]
+Col  = Num  | Sym
+It   = Data | Col 
+
+def adds(src: list, it=None) -> It :
   it = it or Num(); [add(it, v) for v in (src or [])]; return it
 
-def add(x, v, w: int=1):
+def add(x, v:Any, w: int=1) -> Any:
   if v == "?": return v
-  if of(x) == Cols: [add(c, v[c.at], w) for c in x.all]
+  if  of(x) == Cols: [add(c, v[c.at], w) for c in x.all]
   elif of(x) == Data:
     if not x.cols: x.cols = Cols(v)
     else: (x.rows.append if w>0 else x.rows.remove)(v); add(x.cols, v, w)
@@ -39,17 +47,17 @@ def ok(n: Num) -> Num:
   if not n.ok: n.has.sort(); n.ok = 1
   return n
 
-def mid(x):
-  if of(x) == Num: h = ok(x).has; return h[len(h)//2] if h else 0
-  return max(x.has, key=x.has.get) if x.has else None
+def mid(x:Col)-> Atom:
+  if of(x) == Sym: return max(x.has, key=x.has.get) 
+  h = ok(x).has; return h[len(h)//2] if h else 0
 
-def spread(x):
-  if of(x) == Sym: return -sum(v/x.n*math.log2(v/x.n) for v in x.has.values() if v>0)
+def spread(x:Col) -> Qty:
+  if of(x) == Sym: return -sum(v/x.n*math.log2(v/x.n) for v in x.has.values())
   h, m = ok(x).has, len(x.has)
   a, b = (m//10, 9*m//10) if m > 4 else (0, m-1)
   return (h[b] - h[a])/2.56 if m else 0
 
-def norm(n: Num, v):
+def norm(n: Num, v:Qty) -> float:
   h = ok(n).has
   return v if v == "?" else max(0, min(1, (v-h[0]) / (h[-1]-h[0] + 1e-32)))
 
@@ -82,22 +90,22 @@ def bestRanks(d: dict) -> dict:
   return best
 
 # --- Splits & Build ---
-def splits(c, rs1: list):
-  if vs := [r[c.at] for r in rs1]:
-    for cut in (set(vs) if of(c)==Sym else [sorted(vs)[len(vs)//2]]):
-      lf = lambda r: r[c.at]==cut if of(c)==Sym else r[c.at]<=cut
+def splits(c:Col, rs: list):
+  if vs := [r[c.at] for r in rs if r[c.at] != "?"]:
+    cuts = set(vs) if of(c)==Sym else [sorted(vs)[len(vs)//2]]
+    for cut in cuts:
+      fn = lambda v: v=="?" or (v==cut if of(c)==Sym else v<=cut)
       L, R = [], []
-      [(L if lf(r) else R).append(r) for r in rs1]
+      [(L if fn(r[c.at]) else R).append(r) for r in rs]
       yield cut, L, R
 
 def grow(t: Tree, d: Data, rs: list):
   bestW, best = 1e32, None
   for c in d.cols.x:
-    if rs1 := [r for r in rs if r[c.at] != "?"]:
-      for cut, L, R in splits(c, rs1):
-        if min(len(L), len(R)) >= the.leaf:
-          w = sum(spread(adds([t.sc(r) for r in s])) * len(s) for s in (L,R))
-          if w < bestW: bestW, best = w, (c, cut, L, R)
+    for cut, L, R in splits(c, rs):
+      if min(len(L), len(R)) >= the.leaf:
+        w = sum(spread(adds([t.sc(r) for r in s])) * len(s) for s in (L,R))
+        if w < bestW: bestW, best = w, (c, cut, L, R)
   if best:
     t.col, t.cut, L, R = best
     t.L, t.R = build(Tree(t.sc), d, L), build(Tree(t.sc), d, R)
