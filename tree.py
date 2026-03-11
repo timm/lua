@@ -64,7 +64,9 @@ def same(x: Num, y: Num, eps: float) -> bool:
   xs, ys, n, m = ok(x).has, ok(y).has, len(x.has), len(y.has)
   if abs(mid(x) - mid(y)) <= eps: return True
   gt = lt = 0
-  for a in xs: gt += bisect.bisect_left(ys, a); lt += m - bisect.bisect_right(ys, a)
+  for a in xs: 
+    gt += bisect.bisect_left(ys, a) 
+    lt += m - bisect.bisect_right(ys, a)
   if abs(gt - lt) / (n * m) > the.cliffs: return False
   ks = lambda v: abs(bisect.bisect_right(xs, v)/n - bisect.bisect_right(ys, v)/m)
   return max(max(map(ks, xs)), max(map(ks, ys))) <= the.conf * ((n+m)/(n*m))**0.5
@@ -79,26 +81,33 @@ def bestRanks(d: dict) -> dict:
     else: break
   return best
 
-def build(t: Tree, d: Data, rs: list) -> Tree:
-  t.y, t.mids = adds([t.sc(r) for r in rs]), {c.txt: mid(c) for c in clone(d,rs).cols.y}
-  if len(rs) < 2 * the.leaf: return t
+# --- Splits & Build ---
+def splits(c, rs1: list):
+  if vs := [r[c.at] for r in rs1]:
+    for cut in (set(vs) if of(c)==Sym else [sorted(vs)[len(vs)//2]]):
+      lf = lambda r: r[c.at]==cut if of(c)==Sym else r[c.at]<=cut
+      L, R = [], []
+      [(L if lf(r) else R).append(r) for r in rs1]
+      yield cut, L, R
+
+def grow(t: Tree, d: Data, rs: list):
   bestW, best = 1e32, None
   for c in d.cols.x:
-    vs = sorted([r[c.at] for r in rs if r[c.at] != "?"])
-    if not vs: continue
-    cuts = list(set(vs)) if of(c)==Sym else ([vs[len(vs)//2]] if len(vs)>1 else [])
-    for cut in cuts:
-      lf = lambda r: r[c.at]==cut if of(c)==Sym else r[c.at]<=cut
-      L = [r for r in rs if r[c.at] != "?" and lf(r)]
-      R = [r for r in rs if r[c.at] != "?" and not lf(r)]
-      if min(len(L), len(R)) >= the.leaf:
-        w = sum(spread(adds([t.sc(r) for r in s])) * len(s) for s in (L,R))
-        if w < bestW: bestW, best = w, (c, cut, L, R)
+    if rs1 := [r for r in rs if r[c.at] != "?"]:
+      for cut, L, R in splits(c, rs1):
+        if min(len(L), len(R)) >= the.leaf:
+          w = sum(spread(adds([t.sc(r) for r in s])) * len(s) for s in (L,R))
+          if w < bestW: bestW, best = w, (c, cut, L, R)
   if best:
     t.col, t.cut, L, R = best
     t.L, t.R = build(Tree(t.sc), d, L), build(Tree(t.sc), d, R)
-  return t
 
+def build(t: Tree, d: Data, rs: list) -> Tree:
+  t.y = adds([t.sc(r) for r in rs])
+  t.mids = {c.txt: mid(c) for c in clone(d,rs).cols.y}
+  if len(rs) >= 2 * the.leaf: grow(t, d, rs)
+  return t
+  
 def thing(s: str):
   s = s.strip()
   if s.lower() in ["true", "false"]: return s.lower() == "true"
