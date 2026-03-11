@@ -26,7 +26,21 @@ pull: ## commit to main
 Lines=90
 Cols=2
 
-~/tmp/%.pdf : %.lua Makefile lua.ssh
+~/tmp/%.pdf : %.py Makefile
+	@echo "pdfing : $@ ... "
+	@a2ps -Bj --landscape      \
+		--line-numbers=1           \
+	  --chars-per-line=$(Lines) \
+		--highlight-level=normal    \
+		--columns $(Cols)                  \
+		--borders=no --pro=color      \
+		--right-footer="" --left-footer=""  \
+		--footer="page %p."                   \
+		-M letter                              \
+		-o - $< | ps2pdf - $@
+	open $@
+
+~/mp/%.pdf : %.lua Makefile lua.ssh
 	@echo "pdfing : $@ ... "
 	@a2ps -Bj --landscape      \
 		--line-numbers=1           \

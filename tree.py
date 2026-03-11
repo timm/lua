@@ -2,6 +2,7 @@
 import math, re, random, sys, bisect
 from types import SimpleNamespace as o
 
+it=type
 the = o(leaf=3, Budget=50, Show=30, seed=1, p=2, cliffs=0.195, conf=1.36, eps=0.35)
 
 # --- Types (Data Containers) ---
@@ -25,12 +26,11 @@ def adds(src, it=None):
   it = it or Num(); [add(it, v) for v in (src or [])]; return it
 
 def add(x, v):
-  if v == "?": return v
-  t = type(x)
-  if   t == Num:  x.n+=1; x.ok=0; x.has.append(v)
-  elif t == Sym:  x.n+=1; x.has[v] = x.has.get(v, 0) + 1
-  elif t == Cols: [add(c, v[c.at]) for c in x.all]
-  elif t == Data:
+  if v=="?": return v
+  if   it(x)==Num:  x.n+=1; x.ok=0; x.has.append(v)
+  elif it(x)==Sym:  x.n+=1; x.has[v] = x.has.get(v, 0) + 1
+  elif it(x)==Cols: [add(c, v[c.at]) for c in x.all]
+  elif it(x)==Data:
     if x.cols: x.rows.append(add(x.cols, v))
     else:      x.cols = Cols(v)
   return v
@@ -41,16 +41,14 @@ def ok(n):
   return n
 
 def mid(x):
-  t = type(x)
-  if t == Num: h = ok(x).has; return h[len(h)//2] if h else 0
-  if t == Sym: return max(x.has, key=x.has.get) if x.has else None
+  if it(x)==Num: h = ok(x).has; return h[len(h)//2] if h else 0
+  if it(x)==Sym: return max(x.has, key=x.has.get) if x.has else None
 
 def spread(x):
-  t = type(x)
-  if t == Num:
+  if it(x)==Num:
     h = ok(x).has; m = len(h)
     return (h[int(0.9*m)]-h[int(0.1*m)])/2.56 if m>1 else 0
-  if t == Sym: return -sum(v/x.n * math.log2(v/x.n) for v in x.has.values() if v>0)
+  if it(x)==Sym: return -sum(v/x.n * math.log2(v/x.n) for v in x.has.values() if v>0)
 
 def norm(n, v):
   h = ok(n).has; return max(0, min(1, (v-h[0])/(h[-1]-h[0]))) if v!="?" and len(h)>1 else v
@@ -59,10 +57,7 @@ def disty(d, r):
   ls = [abs(norm(c, r[c.at]) - c.goal)**the.p for c in d.cols.y]
   return (sum(ls)/len(ls))**(1/the.p) if ls else 0
 
-def clone(d, rs=[]):
-  add(d2 := Data(), d.cols.names)
-  for r in rs: add(d2, r)
-  return d2
+def clone(d, rs=[]): return adds(rs, adds([d.cols.names], Data()))
 
 # --- Stats ---
 def same(x, y, eps):
@@ -86,11 +81,11 @@ def bestRanks(d):
   return best
 
 # --- Splits & Build ---
-def leaf(c, cut, v): return v <= cut if type(c) == Num else v == cut
+def leaf(c, cut, v): return v<=cut if it(c)==Num else v==cut
 
 def cuts(c, rs):
   vs = [r[c.at] for r in rs if r[c.at] != "?"]
-  if type(c) == Sym: return list(set(vs))
+  if it(c)==Sym: return list(set(vs))
   vs.sort(); return [vs[len(vs)//2]] if len(vs) >= 2 else []
 
 def step(rs, c, cut):
@@ -121,16 +116,15 @@ def thing(s):
     except: pass
 
 def rat(x):
-  t = type(x)
-  if t == float: return f"{x:.2f}"
-  if t == dict:  return "{"+", ".join(sorted(f"{k}={rat(v)}" for k,v in x.items()))+"}"
-  if t == list:  return "{"+", ".join(map(rat, x))+"}"
+  if it(x)==float: return f"{x:.2f}"
+  if it(x)==dict:  return "{"+", ".join(sorted(f"{k}={rat(v)}" for k,v in x.items()))+"}"
+  if it(x)==list:  return "{"+", ".join(map(rat, x))+"}"
   return str(x)
 
 def nodes(t, l=0, p=""):
   yield t, l, p
   if t.L:
-    op = ("<=", ">") if type(t.col) == Num else ("==", "!=")
+    op = ("<=", ">") if it(t.col)==Num else ("==", "!=")
     for k, o in sorted([(t.L, op[0]), (t.R, op[1])], key=lambda x: mid(x[0].y)):
       yield from nodes(k, l+1, f"{t.col.txt} {o} {rat(t.cut)}")
 
