@@ -80,8 +80,8 @@ def same(x: Num, y: Num, eps: float) -> bool:
   return max(max(map(ks, xs)), max(map(ks, ys))) <= the.conf * ((n+m)/(n*m))**0.5
 
 def bestRanks(d: dict) -> dict:
-  num_all = Num("overall")
-  all_c = [adds(adds(lst, Num(k)).has, num_all) for k, lst in d.items()]
+  all_c, num_all = [],Num("overall")
+  for k,lst in d.items(): all_c +=[adds(adds(lst,num_all).has,Num(k))]
   all_c.sort(key=mid)
   best = {all_c[0].txt: all_c[0]}
   for c in all_c[1:]:
