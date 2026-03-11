@@ -1,8 +1,9 @@
 #!/usr/bin/env python3 -B
 import math, re, random, sys, bisect
 from types import SimpleNamespace as o
+from typing import Any, Callable, Iterator
 
-it=type
+of=type
 the = o(leaf=3, Budget=50, Show=30, seed=1, p=2, cliffs=0.195, conf=1.36, eps=0.35)
 
 # --- Types (Data Containers) ---
@@ -21,47 +22,69 @@ class Data:
 class Tree:
   def __init__(i, sc): i.sc,i.col,i.cut,i.L,i.R,i.mids,i.y = sc,0,0,None,None,{},Num()
 
+Col  = Num | Sym
+Qty  = float | int
+Atom = Qty | str
+Row  = list[Atom]
+Rows = list[Row]
+
+# --- Convenience Types ---
+Split = tuple[Rows, Rows]
+Rx    = dict[str, list[float]]
+
 # --- Update ---
-def adds(src, it=None):
+def adds(src: list | None, it: Any = None) -> Any:
   it = it or Num(); [add(it, v) for v in (src or [])]; return it
 
-def add(x, v):
-  if v=="?": return v
-  if   it(x)==Num:  x.n+=1; x.ok=0; x.has.append(v)
-  elif it(x)==Sym:  x.n+=1; x.has[v] = x.has.get(v, 0) + 1
-  elif it(x)==Cols: [add(c, v[c.at]) for c in x.all]
-  elif it(x)==Data:
-    if x.cols: x.rows.append(add(x.cols, v))
-    else:      x.cols = Cols(v)
+def add(x: Any, v: Any, w: int = 1) -> Any:
+  if v == "?": return v
+  if of(x) == Cols:
+    [add(c, v[c.at], w) for c in x.all]
+  elif of(x) == Data:
+    if not x.cols: x.cols = Cols(v)
+    else:
+      add(x.cols, v, w)
+      (x.rows.append if w > 0 else x.rows.remove)(v)
+  else:
+    x.n += w
+    if of(x) == Num:
+      x.ok = 0
+      (x.has.append if w > 0 else x.has.remove)(v)
+    else: # Sym
+      x.has[v] = x.has.get(v, 0) + w
   return v
 
+def sub(x: Any, v: Any) -> Any: 
+  return add(x, v, -1)
+
 # --- Query ---
-def ok(n):
+def ok(n: Num) -> Num:
   if not n.ok: n.has.sort(); n.ok = 1
   return n
 
-def mid(x):
-  if it(x)==Num: h = ok(x).has; return h[len(h)//2] if h else 0
-  if it(x)==Sym: return max(x.has, key=x.has.get) if x.has else None
+def mid(x: Col) -> Atom | None:
+  if of(x)==Num: h = ok(x).has; return h[len(h)//2] if h else 0
+  if of(x)==Sym: return max(x.has, key=x.has.get) if x.has else None
 
-def spread(x):
-  if it(x)==Num:
+def spread(x: Col) -> float:
+  if of(x)==Num:
     h = ok(x).has; m = len(h)
     return (h[int(0.9*m)]-h[int(0.1*m)])/2.56 if m>1 else 0
-  if it(x)==Sym: return -sum(v/x.n * math.log2(v/x.n) for v in x.has.values() if v>0)
+  if of(x)==Sym: return -sum(v/x.n * math.log2(v/x.n) for v in x.has.values() if v>0)
 
-def norm(n, v):
+def norm(n: Num, v: Atom) -> float | str:
   h = ok(n).has
   return max(0, min(1, (v-h[0])/(h[-1]-h[0]))) if v!="?" and len(h)>1 else v
 
-def disty(d, r):
+def disty(d: Data, r: Row) -> float:
   ls = [abs(norm(c, r[c.at]) - c.goal)**the.p for c in d.cols.y]
   return (sum(ls)/len(ls))**(1/the.p) if ls else 0
 
-def clone(d, rs=[]): return adds(rs, adds([d.cols.names], Data()))
+def clone(d: Data, rs: Rows = []) -> Data: 
+  return adds(rs, adds([d.cols.names], Data()))
 
 # --- Stats ---
-def same(x, y, eps):
+def same(x: Num, y: Num, eps: float) -> bool:
   ok(x); ok(y); xs, ys, n, m = x.has, y.has, len(x.has), len(y.has)
   if abs(mid(x) - mid(y)) <= eps: return True
   gt = lt = 0
@@ -72,29 +95,30 @@ def same(x, y, eps):
   ks = lambda v: abs(bisect.bisect_right(xs, v)/n - bisect.bisect_right(ys, v)/m)
   return max(max(map(ks, xs)), max(map(ks, ys))) <= the.conf * ((n+m)/(n*m))**0.5
 
-def bestRanks(d):
-  all_c, num_all = [], Num("overall")
-  for k, lst in d.items(): n = Num(k); adds(lst, n); adds(lst, num_all); all_c.append(n)
-  all_c.sort(key=mid); best = [all_c[0]]
+def bestRanks(d: Rx) -> dict[str, Num]:
+  num_all, all_c = Num("overall"), []
+  for k, lst in d.items(): all_c.append(adds(lst, Num(k))); adds(lst, num_all)
+  all_c.sort(key=mid); best = {all_c[0].txt: all_c[0]}
   for j in range(1, len(all_c)):
-    if same(all_c[0], all_c[j], spread(num_all) * the.eps): best.append(all_c[j])
+    if same(all_c[0], all_c[j], spread(num_all) * the.eps): best[all_c[j].txt] = all_c[j]
     else: break
   return best
 
 # --- Splits & Build ---
-def leaf(c, cut, v): return v<=cut if it(c)==Num else v==cut
+def leaf(c: Col, cut: Atom, v: Atom) -> bool: 
+  return v<=cut if of(c)==Num else v==cut
 
-def cuts(c, rs):
+def cuts(c: Col, rs: Rows) -> list[Atom]:
   vs = [r[c.at] for r in rs if r[c.at] != "?"]
-  if it(c)==Sym: return list(set(vs))
+  if of(c)==Sym: return list(set(vs))
   vs.sort(); return [vs[len(vs)//2]] if len(vs) >= 2 else []
 
-def step(rs, c, cut):
+def step(rs: Rows, c: Col, cut: Atom) -> Split | None:
   L = [r for r in rs if r[c.at]!="?" and leaf(c, cut, r[c.at])]
   R = [r for r in rs if r[c.at]!="?" and not leaf(c, cut, r[c.at])]
   return (L, R) if min(len(L), len(R)) >= the.leaf else None
 
-def build(t, d, rs):
+def build(t: Tree, d: Data, rs: Rows) -> Tree:
   t.y = adds([t.sc(r) for r in rs])
   t.mids = {c.txt: mid(c) for c in clone(d, rs).cols.y}
   if len(rs) < 2 * the.leaf: return t
@@ -110,47 +134,51 @@ def build(t, d, rs):
   return t
 
 # --- Helpers & Display ---
-def thing(s):
+WHAT= [int, float, lambda x: {"true":True, "false":False}.get(x, x)]
+def thing(s: str) -> Atom | bool:
   s = s.strip()
-  for f in [int, float, lambda x: {"true":True, "false":False}.get(x, x)]:
-    try: return f(s)
+  for fn in WHAT:
+    try: return fn(s)
     except: pass
 
-def rat(x):
-  if it(x)==float: return f"{x:.2f}"
-  if it(x)==dict:  return "{"+", ".join(sorted(f"{k}={rat(v)}" for k,v in x.items()))+"}"
-  if it(x)==list:  return "{"+", ".join(map(rat, x))+"}"
+def rat(x: Any) -> str:
+  if of(x)==float: return f"{x:.2f}"
+  if of(x)==dict:  return "{"+", ".join(sorted(f"{k}={rat(v)}" for k,v in x.items()))+"}"
+  if of(x)==list:  return "{"+", ".join(map(rat, x))+"}"
   return str(x)
 
-def nodes(t, l=0, p=""):
+def nodes(t: Tree, l: int = 0, p: str = "") -> Iterator[tuple[Tree, int, str]]:
   yield t, l, p
   if t.L:
-    op = ("<=", ">") if it(t.col)==Num else ("==", "!=")
+    op = ("<=", ">") if of(t.col)==Num else ("==", "!=")
     for k, o in sorted([(t.L, op[0]), (t.R, op[1])], key=lambda x: mid(x[0].y)):
       yield from nodes(k, l+1, f"{t.col.txt} {o} {rat(t.cut)}")
 
 # --- Examples ---
-def eg_data(f):
-  d = Data()
-  with open(f) as fp: [add(d, list(map(thing, l.split(",")))) for l in fp]
+def eg_data(f: str) -> None:
+  with open(f) as fp: d = adds([list(map(thing, l.split(","))) for l in fp], Data())
   random.shuffle(d.rows); d2 = clone(d, d.rows[:the.Budget])
   for n,l,p in nodes(build(Tree(lambda r: disty(d2, r)), d2, d2.rows)):
      print(f"{'|   '*(l-1)+p if l>0 else '':<{the.Show}}",end="")
      print(f",{rat(mid(n.y)):>4} ,({n.y.n:3}), {rat(n.mids)}")
 
-def eg_ranks(dummy):
+def eg_ranks() -> None:
   dict_ = {}
   for j in range(1, 21):
     k, lam = (2, 10) if j <= 5 else (1, 20)
     dict_[f"t{j}"] = [weibull(k, lam) for _ in range(50)]
   print("\nTop Tier Treatments:")
-  for num in bestRanks(dict_): print(f"  {num.txt:<5} median: {rat(mid(num))}")
+  for k, num in bestRanks(dict_).items(): print(f"  {k:<5} median: {rat(mid(num))}")
 
-def weibull(k, lam): return lam * (-math.log(1 - random.random()))**(1/k)
+def weibull(k: float | int, lam: float | int) -> float: 
+  return lam * (-math.log(1 - random.random()))**(1/k)
 
 if __name__ == "__main__":
   args = sys.argv[1:]; random.seed(the.seed)
   while args:
-    k = re.sub(r"^-+", "", args.pop(0)); v = args.pop(0)
-    if f"eg_{k}" in globals(): globals()[f"eg_{k}"](v)
-    elif hasattr(the, k): setattr(the, k, thing(v))
+    k = re.sub(r"^-+", "", args.pop(0))
+    if f"eg_{k}" in globals():
+      fn = globals()[f"eg_{k}"]
+      fn(*[make(args.pop(0)) for arg, make in fn.__annotations__.items() if arg != "return"])
+    elif hasattr(the, k): 
+      setattr(the, k, thing(args.pop(0)))
