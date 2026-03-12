@@ -146,7 +146,7 @@ def leaf(t: Tree, r: Row) -> Tree:
   go = (v != "?" and (v<=t.cut if of(t.col)==Num else v==t.cut))
   return leaf(t.L if go else t.R, r)
 
-def thing(s: str) -> Atom:
+def thing(s: str) -> Atom:
   for fun in [int,float,
               lambda s: {"true":True,"false":False}.get(s.lower(),s)]:
     try: return fun(s)

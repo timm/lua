@@ -28,7 +28,7 @@ Cols=2
 
 ~/tmp/%.pdf : %.py Makefile
 	@echo "pdfing : $@ ... "
-	@a2ps -Bj --landscape      \
+	@a2ps -Bj --portrait      \
 		--line-numbers=1           \
 	  --chars-per-line=$(Lines) \
 		--highlight-level=normal    \
