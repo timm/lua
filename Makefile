@@ -23,14 +23,14 @@ push: ## commit to main
 pull: ## commit to main
 	git pull
 
-Lines=90
+Chars=90
 Cols=2
 
 ~/tmp/%.pdf : %.py Makefile
 	@echo "pdfing : $@ ... "
-	@a2ps -Bj --portrait      \
+	@a2ps -Bj --landscape      \
 		--line-numbers=1           \
-	  --chars-per-line=$(Lines) \
+	  --chars-per-line=$(Chars) \
 		--highlight-level=normal    \
 		--columns $(Cols)                  \
 		--borders=no --pro=color      \

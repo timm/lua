@@ -8,6 +8,7 @@ of = type
 the = S(leaf=2, Budget=50, Show=30, seed=1, p=2, cliffs=0.195,
         conf=1.36, eps=0.35, Check=5)
 
+# --- Create ----
 class Obj:
   __repr__ = lambda i: i.__class__.__name__+o(i.__dict__)+"}"
 
@@ -25,31 +26,35 @@ class Sym(Obj):
 class Data(Obj):
   def __init__(i,src=None):
     src = iter(src or {})
-    i.rows,i.cols = [], Cols(next(src))
+    i.rows, i.cols, i._mid = [], Cols(next(src)), None
     adds(src,i)
 
 class Cols(Obj):
-  def __init__(i, n: list):
+  def __init__(i, n: list[str]):
     i.names, i.x, i.y, i.all = n, [], [], []
-    for j, s in enumerate(n):
-      i.all += [(Num if s[0].isupper() else Sym)(s, j)]
-      if not s.endswith("X"):
-        (i.y if re.search(r"[+\-!]$", s) else i.x).append(i.all[-1])
+    for j,s in enumerate(n):
+      i.all += [(Num if s[0].isupper() else Sym)(s, j)] 
+      if not c.txt.endswith("X"):
+        (i.y if re.search(r"[+\-!]$", c.txt) else i.x).append(i.all[-1])
 
 Qty  = int | float
 Atom = str | bool | Qty
 Row  = list[Atom]
 Rows = list[Row]
 Col  = Num  | Sym
-It   = Data | Col
 
-def adds(src: Iterable, it=None) -> It:
+def clone(d: Data, rs: list=[]) -> Data:
+  return adds(rs, Data([d.cols.names]))
+
+# --- Update ----
+def adds(src: Iterable, it=None) -> Data | Col:
   it = it or Num(); [add(it, v) for v in (src or [])]; return it
 
 def add(x, v:Any) -> Any:
   if v == "?": return v
   if  of(x) == Cols: [add(c, v[c.at]) for c in x.all]
   elif of(x) == Data:
+    x._mid = None
     if not x.cols: x.cols = Cols(v)
     else: x.rows += [v]; add(x.cols, v)
   else:
@@ -59,8 +64,12 @@ def add(x, v:Any) -> Any:
     else: x.has[v] = 1 + x.has.get(v, 0)
   return v
 
+# --- Query ----
 def mid(x:Col) -> Atom:
-  return x.mu if of(x) == Num else max(x.has, key=x.has.get)
+  if of(x)==Num: return x.mu
+  if of(x)==Sym: return max(x.has, key=x.has.get)
+  x._mid = x._mid or [mid(c) for c in x.cols.all]
+  return x._mid
 
 def spread(x:Col) -> Qty:
   if of(x) == Sym:
@@ -76,35 +85,8 @@ def disty(d: Data, r: list) -> float:
   ls = [abs(norm(c, r[c.at]) - c.goal)**the.p for c in d.cols.y]
   return (sum(ls)/len(ls))**(1/the.p) if ls else 0
 
-def clone(d: Data, rs: list=[]) -> Data:
-  return adds(rs, Data([d.cols.names]))
-
-def same(xs: list, ys: list, eps: float) -> bool:
-  xs, ys = sorted(xs), sorted(ys)
-  n, m = len(xs), len(ys)
-  if abs(xs[n//2] - ys[m//2]) <= eps: return True
-  gt = lt = 0
-  for a in xs:
-    gt += bisect.bisect_left(ys, a)
-    lt += m - bisect.bisect_right(ys, a)
-  if abs(gt - lt) / (n * m) > the.cliffs: return False
-  ks = lambda v: abs(bisect.bisect_right(xs,v)/n
-                    - bisect.bisect_right(ys,v)/m)
-  return max(max(map(ks,xs)), max(map(ks,ys))) \
-         <= the.conf * ((n+m)/(n*m))**0.5
-
-def bestRanks(d: dict) -> dict:
-  items = sorted(d.items(),
-                 key=lambda kv: sorted(kv[1])[len(kv[1])//2])
-  k0, lst0 = items[0]
-  best = {k0: adds(lst0, Num(k0))}
-  for k, lst in items[1:]:
-    if same(lst0, lst, spread(best[k0])*the.eps):
-      best[k] = adds(lst, Num(k))
-    else: break
-  return best
-
-# --- Splits & Build ---
+
+# --- Tree ---
 def splits(c:Col, rs: list):
   if vs := [r[c.at] for r in rs if r[c.at] != "?"]:
     cuts = set(vs) if of(c)==Sym else [sorted(vs)[len(vs)//2]]
@@ -146,7 +128,34 @@ def leaf(t: Tree, r: Row) -> Tree:
   go = (v != "?" and (v<=t.cut if of(t.col)==Num else v==t.cut))
   return leaf(t.L if go else t.R, r)
 
-def thing(s: str) -> Atom:
+# --- Stats ---
+def same(xs: list, ys: list, eps: float) -> bool:
+  xs, ys = sorted(xs), sorted(ys)
+  n, m = len(xs), len(ys)
+  if abs(xs[n//2] - ys[m//2]) <= eps: return True
+  gt = lt = 0
+  for a in xs:
+    gt += bisect.bisect_left(ys, a)
+    lt += m - bisect.bisect_right(ys, a)
+  if abs(gt - lt) / (n * m) > the.cliffs: return False
+  ks = lambda v: abs(bisect.bisect_right(xs,v)/n
+                    - bisect.bisect_right(ys,v)/m)
+  return max(max(map(ks,xs)), max(map(ks,ys))) \
+         <= the.conf * ((n+m)/(n*m))**0.5
+
+def bestRanks(d: dict) -> dict:
+  items = sorted(d.items(),
+                 key=lambda kv: sorted(kv[1])[len(kv[1])//2])
+  k0, lst0 = items[0]
+  best = {k0: adds(lst0, Num(k0))}
+  for k, lst in items[1:]:
+    if same(lst0, lst, spread(best[k0])*the.eps):
+      best[k] = adds(lst, Num(k))
+    else: break
+  return best
+
+# --- Misc ---
+def thing(s: str) -> Atom:
   for fun in [int,float,
               lambda s: {"true":True,"false":False}.get(s.lower(),s)]:
     try: return fun(s)
@@ -166,7 +175,7 @@ def csv(f, clean=lambda s: s.partition("#")[0].split(",")):
       if any(x.strip() for x in r):
         yield [thing(x.strip()) for x in r]
 
-def eg_csv(f: str):
+def eg_csv(f: str):
   [print(row) for n,row in enumerate(csv(f)) if n%30==0]
 
 def eg_data(f: str):
