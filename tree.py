@@ -5,7 +5,7 @@ from types import SimpleNamespace as S
 from typing import Any, Iterable
 
 of = type
-the = S(leaf=2, Budget=50, Show=30, seed=1, p=2, cliffs=0.195,
+the = S(leaf=2, Budget=50, Bins=7, Show=30, seed=1, p=2, cliffs=0.195,
         conf=1.36, eps=0.35, Check=5)
 
 # --- Create ----
@@ -34,8 +34,8 @@ class Cols(Obj):
     i.names, i.x, i.y, i.all = n, [], [], []
     for j,s in enumerate(n):
       i.all += [(Num if s[0].isupper() else Sym)(s, j)] 
-      if not c.txt.endswith("X"):
-        (i.y if re.search(r"[+\-!]$", c.txt) else i.x).append(i.all[-1])
+      if not s.endswith("X"):
+        (i.y if s[-1] in "+-!" else i.x).append(i.all[-1])
 
 Qty  = int | float
 Atom = str | bool | Qty
@@ -50,22 +50,27 @@ def clone(d: Data, rs: list=[]) -> Data:
 def adds(src: Iterable, it=None) -> Data | Col:
   it = it or Num(); [add(it, v) for v in (src or [])]; return it
 
-def add(x, v:Any) -> Any:
+def sub(x, v:Any): return add(x,v,-1)
+
+def add(x, v:Any, w:int=1) -> Any:
   if v == "?": return v
-  if  of(x) == Cols: [add(c, v[c.at]) for c in x.all]
+  if  of(x) == Cols: [add(c, v[c.at],w) for c in x.all]
   elif of(x) == Data:
     x._mid = None
     if not x.cols: x.cols = Cols(v)
-    else: x.rows += [v]; add(x.cols, v)
+    else: 
+      add(x.cols, v,w)
+      (x.rows.append if w>0 else x.rows.remove)(v)
   else:
-    x.n += 1
+    x.n += w
     if of(x) == Num:
-      d = v - x.mu; x.mu += d/x.n; x.m2 += d*(v - x.mu)
-    else: x.has[v] = 1 + x.has.get(v, 0)
+      if w < 0 and x.n <= 2: x.n = x.mu = x.m2 = 0
+      elif x.n>0: d = v - x.mu; x.mu += w*d/x.n; x.m2 += w*d*(v - x.mu)
+    else: x.has[v] = w + x.has.get(v, 0)
   return v
 
 # --- Query ----
-def mid(x:Col) -> Atom:
+def mid(x:Col) -> Atom | Row:
   if of(x)==Num: return x.mu
   if of(x)==Sym: return max(x.has, key=x.has.get)
   x._mid = x._mid or [mid(c) for c in x.cols.all]
@@ -74,7 +79,7 @@ def mid(x:Col) -> Atom:
 def spread(x:Col) -> Qty:
   if of(x) == Sym:
     return -sum(v/x.n*math.log2(v/x.n) for v in x.has.values())
-  return (x.m2/(x.n - 1))**.5 if x.n > 1 else 0
+  return (max(0,x.m2)/(x.n - 1))**.5 if x.n > 1 else 0
 
 def norm(n: Num, v:Qty) -> float:
   if v == "?": return v
@@ -84,26 +89,24 @@ def norm(n: Num, v:Qty) -> float:
 def disty(d: Data, r: list) -> float:
   ls = [abs(norm(c, r[c.at]) - c.goal)**the.p for c in d.cols.y]
   return (sum(ls)/len(ls))**(1/the.p) if ls else 0
-
 
 # --- Tree ---
-def splits(c:Col, rs: list):
+def splits(c: Col, rs: list, sc) -> tuple[Atom,Rows,Rows,float]:
   if vs := [r[c.at] for r in rs if r[c.at] != "?"]:
-    cuts = set(vs) if of(c)==Sym else [sorted(vs)[len(vs)//2]]
-    for cut in cuts:
-      fn = lambda v: v=="?" or (v==cut if of(c)==Sym else v<=cut)
-      L, R = [], []
-      [(L if fn(r[c.at]) else R).append(r) for r in rs]
-      yield cut, L, R
+    for cut in (set(vs) if of(c)==Sym else [sorted(vs)[len(vs)//2]]):
+      lhs, rhs, L, R = Num(), Num(), [], []
+      for r in rs:
+        go = (v:=r[c.at])=="?" or (v==cut if of(c)==Sym else v<=cut)
+        (L if go else R).append(r)
+        add(lhs if go else rhs, sc(r))
+      yield cut, L, R, lhs.n*spread(lhs)+rhs.n*spread(rhs)
 
-def grow(t: Tree, d: Data, rs: list):
+def grow(t: Tree, d: Data, rs: list) -> Tree:
   bestW, best = 1e32, None
   for c in d.cols.x:
-    for cut, L, R in splits(c, rs):
-      if min(len(L), len(R)) >= the.leaf:
-        w = sum(spread(adds([t.sc(r) for r in s]))
-                * len(s) for s in (L,R))
-        if w < bestW: bestW, best = w, (c, cut, L, R)
+    for cut, L, R, w in splits(c, rs, t.sc):
+      if min(len(L),len(R)) >= the.leaf and w < bestW:
+        bestW, best = w, (c, cut, L, R)
   if best:
     t.col, t.cut, L, R = best
     t.L, t.R = build(Tree(t.sc), d, L), build(Tree(t.sc), d, R)
