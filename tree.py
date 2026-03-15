@@ -4,9 +4,8 @@ import math, re, random, sys, bisect
 from types import SimpleNamespace as S
 from typing import Any, Iterable
 
-of = type
-the = S(leaf=2, Budget=50, Bins=7, Show=30, seed=1, p=2, cliffs=0.195,
-        conf=1.36, eps=0.35, Check=5)
+the = S(leaf=2, Budget=50, Bins=7, Show=30, seed=1, p=2,
+        cliffs=0.195, conf=1.36, eps=0.35, Check=5)
 
 # --- Create ----
 class Obj:
@@ -54,8 +53,8 @@ def sub(x, v:Any): return add(x,v,-1)
 
 def add(x, v:Any, w:int=1) -> Any:
   if v == "?": return v
-  if  of(x) == Cols: [add(c, v[c.at],w) for c in x.all]
-  elif of(x) == Data:
+  if  type(x) == Cols: [add(c, v[c.at],w) for c in x.all]
+  elif type(x) == Data:
     x._mid = None
     if not x.cols: x.cols = Cols(v)
     else: 
@@ -63,21 +62,22 @@ def add(x, v:Any, w:int=1) -> Any:
       (x.rows.append if w>0 else x.rows.remove)(v)
   else:
     x.n += w
-    if of(x) == Num:
+    if type(x) == Num:
       if w < 0 and x.n <= 2: x.n = x.mu = x.m2 = 0
-      elif x.n>0: d = v - x.mu; x.mu += w*d/x.n; x.m2 += w*d*(v - x.mu)
+      elif x.n>0: 
+        d = v - x.mu; x.mu += w*d/x.n; x.m2 += w*d*(v - x.mu)
     else: x.has[v] = w + x.has.get(v, 0)
   return v
 
 # --- Query ----
 def mid(x:Col) -> Atom | Row:
-  if of(x)==Num: return x.mu
-  if of(x)==Sym: return max(x.has, key=x.has.get)
+  if type(x)==Num: return x.mu
+  if type(x)==Sym: return max(x.has, key=x.has.get)
   x._mid = x._mid or [mid(c) for c in x.cols.all]
   return x._mid
 
 def spread(x:Col) -> Qty:
-  if of(x) == Sym:
+  if type(x) == Sym:
     return -sum(v/x.n*math.log2(v/x.n) for v in x.has.values())
   return (max(0,x.m2)/(x.n - 1))**.5 if x.n > 1 else 0
 
@@ -86,17 +86,23 @@ def norm(n: Num, v:Qty) -> float:
   sd = spread(n) + 1e-32
   return 1/(1 + math.exp(-1.7*(v - n.mu)/sd))
 
+def mink(items):
+  d,n = 0, 1e-32
+  for item in items: d,n = d+item**the.p, n+1
+  return (d/n) ** (1/the.p)
+
 def disty(d: Data, r: list) -> float:
-  ls = [abs(norm(c, r[c.at]) - c.goal)**the.p for c in d.cols.y]
-  return (sum(ls)/len(ls))**(1/the.p) if ls else 0
+  return mink(abs(norm(c, r[c.at]) - c.goal) for c in d.cols.y)
 
 # --- Tree ---
 def splits(c: Col, rs: list, sc) -> tuple[Atom,Rows,Rows,float]:
   if vs := [r[c.at] for r in rs if r[c.at] != "?"]:
-    for cut in (set(vs) if of(c)==Sym else [sorted(vs)[len(vs)//2]]):
+    cuts = set(vs) if type(c)==Sym else [sorted(vs)[len(vs)//2]]
+    for cut in cuts:
       lhs, rhs, L, R = Num(), Num(), [], []
       for r in rs:
-        go = (v:=r[c.at])=="?" or (v==cut if of(c)==Sym else v<=cut)
+        v = r[c.at]
+        go = v=="?" or (v==cut if type(c)==Sym else v<=cut)
         (L if go else R).append(r)
         add(lhs if go else rhs, sc(r))
       yield cut, L, R, lhs.n*spread(lhs)+rhs.n*spread(rhs)
@@ -120,7 +126,7 @@ def build(t: Tree, d: Data, rs: list) -> Tree:
 def nodes(t: Tree, l: int=0, p: str=""):
   yield t, l, p
   if t.L:
-    op = ("<=",">") if of(t.col)==Num else ("==","!=")
+    op = ("<=",">") if type(t.col)==Num else ("==","!=")
     for k, op_s in sorted([(t.L, op[0]), (t.R, op[1])],
                           key=lambda x: mid(x[0].y)):
       yield from nodes(k, l+1, f"{t.col.txt} {op_s} {o(t.cut)}")
@@ -128,7 +134,7 @@ def nodes(t: Tree, l: int=0, p: str=""):
 def leaf(t: Tree, r: Row) -> Tree:
   if not t.L: return t
   v = r[t.col.at]
-  go = (v != "?" and (v<=t.cut if of(t.col)==Num else v==t.cut))
+  go = (v != "?" and (v<=t.cut if type(t.col)==Num else v==t.cut))
   return leaf(t.L if go else t.R, r)
 
 # --- Stats ---
@@ -144,7 +150,7 @@ def same(xs: list, ys: list, eps: float) -> bool:
   ks = lambda v: abs(bisect.bisect_right(xs,v)/n
                     - bisect.bisect_right(ys,v)/m)
   return max(max(map(ks,xs)), max(map(ks,ys))) \
-         <= the.conf * ((n+m)/(n*m))**0.5
+          <= the.conf * ((n+m)/(n*m))**0.5
 
 def bestRanks(d: dict) -> dict:
   items = sorted(d.items(),
@@ -165,10 +171,11 @@ def thing(s: str) -> Atom:
     except: ...
 
 def o(x):
-  if of(x)==float: return f"{x:.2f}"
-  if of(x)==dict:
-    return "{"+", ".join(f"{k}={o(v)}" for k,v in sorted(x.items()))+"}"
-  if of(x)==list: return "{"+", ".join(map(o, x))+"}"
+  if type(x)==float: return f"{x:.2f}"
+  if type(x)==dict:
+    return "{"+", ".join(f"{k}={o(v)}" 
+                         for k,v in sorted(x.items()))+"}"
+  if type(x)==list: return "{"+", ".join(map(o, x))+"}"
   return str(x)
 
 def csv(f, clean=lambda s: s.partition("#")[0].split(",")):

@@ -23,16 +23,16 @@ push: ## commit to main
 pull: ## commit to main
 	git pull
 
-Chars=90
+Font=90
 Cols=2
 
 ~/tmp/%.pdf : %.py Makefile
 	@echo "pdfing : $@ ... "
 	@a2ps -Bj --landscape      \
 		--line-numbers=1           \
-	  --chars-per-line=$(Chars) \
+		--font-size=$(Font) \
 		--highlight-level=normal    \
-		--columns $(Cols)                  \
+		--columns=$(Cols)                  \
 		--borders=no --pro=color      \
 		--right-footer="" --left-footer=""  \
 		--footer="page %p."                   \
