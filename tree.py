@@ -174,7 +174,7 @@ def splits(c: Col, rs: list, d: Data):
 
 def build(d, rs):
   """Recursively builds a decision tree by finding the best splits."""
-  def _branch(t):
+  def _kids(t):
     bestW, best = 1e32, None
     for c in t.d.cols.x:
       for cut, L, R, w in splits(c, t.d.rows, d):
@@ -183,10 +183,12 @@ def build(d, rs):
     if best:
       t.col, t.cut, L, R = best
       t.L, t.R = _node(Tree(d, L)), _node(Tree(d, R))
+
   def _node(t):
     t.y, t.mids = scoresy(d, t.d.rows), goals(t.d)
-    if len(t.d.rows) >= 2 * the.learn.leaf: _branch(t)
+    if len(t.d.rows) >= 2 * the.learn.leaf: _kids(t)
     return t
+
   return _node(Tree(d, rs))
 
 def nodes(t: Tree, l=0, col=None, op="", cut=None):
