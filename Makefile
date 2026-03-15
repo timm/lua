@@ -111,4 +111,90 @@ Cols=3
 		 tee $@
 	@sort -n $@  | cut -d, -f 1 | fmt -65
 
+Html := ~/tmp
+
+define AWK_SCRIPT
+/^#[ \t]*[-—]+.*[-—]+/ { sub(/^#[ \t]*[-—]+[ \t]*/, ""); sub(/[ \t]*[-—]+.*$$/, ""); print "# ## " $$0 "\n\n"; next }
+/^[ \t]*(def|class)/   { h=$$0; next }
+h && /"""/             { gsub(/"""/,""); print "#"$$0; print h; h=""; next }
+h                      { print h; h="" }
+1
+endef
+export AWK_SCRIPT
+
+define HEADER_HTML
+<div class="custom-header" style="background:#f5f5f5; padding:10px 20px; border-bottom:1px solid #ccc; font-family:sans-serif; display: flex; justify-content: space-between; align-items: center;">
+  
+  <div>
+    <strong>tree.py</strong> | 
+    <span style="color:#666; font-size:0.9em;">Explainable Multi-Objective Optimization</span>
+  </div>
+
+  <div style="font-size: 0.9em;">
+    <a href="https://github.com/timm/PROJECT" style="text-decoration:none; color:#0366d6;">GitHub</a> &bull; 
+    <a href="https://github.com/timm/PROJECT/issues" style="text-decoration:none; color:#0366d6;">Issues</a>
+  </div>
+
+  <div style="display: flex; gap: 8px; align-items: center;">
+    <img src="https://img.shields.io/badge/python-3.12+-blue.svg" alt="Python 3.12+" style="height: 20px; width: auto;">
+    <img src="https://img.shields.io/badge/topic-Explainable%20AI-purple.svg" alt="Explainable AI" style="height: 20px; width: auto;">
+    <a href="https://opensource.org/licenses/MIT" target="_blank" style="display: flex; align-items: center;">
+      <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License: MIT" style="border:none; height: 20px; width: auto;">
+    </a>
+  </div>
+
+</div>
+endef
+export HEADER_HTML
+
+define CUSTOM_CSS
+/* 1. Premium Typography Stack */
+body, div.docs, p {
+  /* Optima/Candara for Mac/Win (Humanist), then falling back to Verdana for readability */
+  font-family: Optima, Candara, "Noto Sans", source-sans-pro, sans-serif !important;
+  font-size: 15px;
+  color: #333;
+}
+
+/* 2. Distinctive Header Font */
+div.docs h1, div.docs h2, div.docs h3 {
+  /* Trebuchet is slightly more "engineered" and works great for tech docs */
+  font-family: "Trebuchet MS", "Lucida Grande", "Lucida Sans Unicode", "Lucida Sans", Tahoma, sans-serif !important;
+  font-weight: bold;
+  text-align: left !important;
+  border-bottom: 1px solid #ddd;
+  margin-top: 40px;
+  display: block; 
+  width: 100%;
+}
+div.docs h3 { border-bottom: 0px; }
+
+/* 3. The "Hugging" Text */
+div.docs, div.docs p {
+  text-align: right !important;
+  padding-right: 30px !important;
+}
+
+/* 4. Left-Anchored Code */
+div.docs pre {
+  font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", "Courier New", monospace !important;
+  text-align: left !important;
+  display: block;
+  margin: 15px 0 !important;
+  font-size: 0.7em !important;
+  background: #fbfbfb; /* Slightly warmer than pure white */
+  padding: 12px;
+  border: 1px solid #eee;
+  border-left: 3px solid #7D9029; /* Subtle green accent to match your license badge */
+}
+endef
+export CUSTOM_CSS
+
+$(Html)/%.html: %.py
+	@mkdir -p $(Html)
+	@awk "$$AWK_SCRIPT" $< > $(Html)/$<
+	@cd $(Html) && pycco -d . $<
+	@echo "$$CUSTOM_CSS" >> $(Html)/pycco.css
+	@awk '/<body/{print; print ENVIRON["HEADER_HTML"]; next} 1' $@ > $@.tmp && mv $@.tmp $@
+	@rm $(Html)/$<
 

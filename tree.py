@@ -3,34 +3,41 @@
 tree.py: explainable multi-objective optimization   
 (c) 2026 Tim Menzies, timm@ieee.org, MIT license   
   
-Options:   
-    -h                    show help on command line options  
-    --seed=1              set random number seed   
-    --p=2                 set distance type (1 is Manhattan, 2 is Euclidean)   
-    --learn.leaf=3        set examples per leaves in a tree   
-    --learn.Budget=50     set number of rows to evaluate   
-    --learn.Check=5       set number of guesses to check   
-    --stats.cliffs=0.195  set threshold for Cliff's Delta   
-    --stats.conf=1.36     set confidence coefficient for KS test   
-    --stats.eps=0.35      set margin of error multiplier   
-    --show.Show=30        set display width/padding for trees   
-    --show.Decimals=2     set number of decimals for float formatting   
-    --tree  <str>         build and print a decision tree
-    --all   file          run all tests/examples using  csv file
+### Options:   
 
+    -h                    show help on command line options     
+    --seed=1              set random number seed      
+    --p=2                 set distance type (1 is Manhattan, 2 is Euclidean)      
+    --learn.leaf=3        set examples per leaves in a tree      
+    --learn.Budget=50     set number of rows to evaluate      
+    --learn.Check=5       set number of guesses to check      
+    --stats.cliffs=0.195  set threshold for Cliff's Delta      
+    --stats.conf=1.36     set confidence coefficient for KS test      
+    --stats.eps=0.35      set margin of error multiplier      
+    --show.Show=30        set display width/padding for trees      
+    --show.Decimals=2     set number of decimals for float formatting      
+    --tree  <str>         build and print a decision tree   
+    --all   file          run all tests/examples using  csv file   
+   
+### Input
 Input is CSV. Header (row 1) defines column roles as follows:   
-    [A-Z]* : Numeric (e.g. "Age").     [a-z]* : Symbolic (e.g. "job").   
-    *+     : Maximize (e.g. "Pay+").   *-     : Minimize (e.g. "Cost-").   
-    *X     : Ignored (e.g. "idX").     ?      : Missing value (not in header)   
 
+    [A-Z]* : Numeric (e.g. "Age").     [a-z]* : Symbolic (e.g. "job").      
+    *+     : Maximize (e.g. "Pay+").   *-     : Minimize (e.g. "Cost-").      
+    *X     : Ignored (e.g. "idX").     ?      : Missing value (not in header)      
+
+### Install
 To install and test, download http://githib.com/timm/lua/tree.py. Then:   
-    chmod +x tree.py   
-    mkdir -p $HOME/gits   # download sample data    
-    git clone http://github.com/timm/moot $HOME/gits/moot   
-    ./tree.py --tree ~/gits/moot/optimize/misc/auto93.csv   
+   
+    chmod +x tree.py      
+    mkdir -p $HOME/gits   # download sample data       
+    git clone http://github.com/timm/moot $HOME/gits/moot      
+    ./tree.py --tree ~/gits/moot/optimize/misc/auto93.csv      
 
-To fun all tests (verbose output):
+### Run all tests:
+
     ./tree.py --all ~/gits/moot/optimize/misc/auto93.csv   
+
 """
 from time import perf_counter_ns as now
 import re, random, sys, bisect
@@ -281,7 +288,7 @@ def cli(fns, the):
     else:
       set_dot(the, k, thing(args.pop(0)))  
 
-# --- Examples ---
+# --- Examples ---
 def eg_h(): 
   """Show help."""
   print(__doc__)
