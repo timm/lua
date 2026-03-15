@@ -23,8 +23,8 @@ push: ## commit to main
 pull: ## commit to main
 	git pull
 
-Font=90
-Cols=2
+Font=5.5
+Cols=3
 
 ~/tmp/%.pdf : %.py Makefile
 	@echo "pdfing : $@ ... "
@@ -99,7 +99,7 @@ Cols=2
 ~/tmp/lua_test.log:  ## run ezrtest on many files
 	@mkdir -p ~/tmp
 	@time ls -r $(HOME)/gits/moot/optimize/*/*.csv  | \
-	   xargs -P 24 -n 1 -I{} sh -c 'python3 -B tree.py  --seed $$RANDOM --test "{}"' | \
+	   xargs -P 24 -n 1 -I{} sh -c 'python3 -B tree.py --test "{}"' | \
 		 tee $@
 	@sort -n $@  | cut -d, -f 1 | fmt -65
 
