@@ -1,62 +1,60 @@
-local l={}
+-- lib.lua: batteries for Lua
+-- (c) 2026 Tim Menzies timm@ieee.org, MIT license
+-- vim: set et sw=2 tw=90 :
 
-l.fmt = string.format
+local lib = {}
+local floor,min,abs,log = math.floor,math.min,math.abs,math.log
+local rand = math.random
 
-function l.new(kl,obj)   
-  kl.__index=kl; return setmetatable(obj,kl) end
+-- oo --
+function lib.new(kl,obj) kl.__index=kl; return setmetatable(obj,kl) end
 
-function l.trim(s)      
-  return s:match"^%s*(.-)%s*$" end
+-- tables --
+function lib.push(t,x)       t[1+#t]=x; return x end
+function lib.sort(t,fn)      table.sort(t,fn); return t end
+function lib.map(t,f,     u) u={}; for i,x in ipairs(t) do u[i]=f(x) end; return u end
+function lib.kap(t,f,     u) u={}; for k,v in pairs(t) do u[1+#u]=f(k,v) end; return u end
+function lib.sum(t,f,     n) n=0; for k,v in pairs(t) do n=n+f(k,v) end; return n end
+function lib.kv(t,fk,fv,  u) 
+  u={}; for _,x in ipairs(t) do u[fk(x)]=fv(x) end; return u end
+function lib.cat(t)          return "{"..table.concat(t,", ").."}" end
+function lib.slice(t,lo,hi,  u)
+  u={}; for i=(lo or 1),min(hi or #t,#t) do u[1+#u]=t[i] end; return u end
+function lib.shuffle(t,     j)
+  for i=#t,2,-1 do j=rand(i); t[i],t[j]=t[j],t[i] end; return t end
+function lib.many(t,n) return lib.slice(lib.shuffle(t),1,n) end
 
-function l.kap(t,fn,  u) 
-  u={};for k,v in pairs(t) do u[1+#u]=fn(k,v) end; return u end
+-- strings --
+lib.fmt = string.format
+function lib.trim(s) return s:match"^%s*(.-)%s*$" end
+function lib.rat(x,     u)
+  if math.type(x)=="float" then return lib.fmt("%.2f",x) end
+  if type(x)~="table"      then return tostring(x) end
+  if #x>0 then return lib.cat(lib.map(x,lib.rat)) end
+  u={}; for k,v in pairs(x) do u[1+#u]=k.."="..lib.rat(v) end
+  return lib.cat(lib.sort(u)) end
+function lib.oo(x) print(lib.rat(x)); return x end
 
-function l.map(t,fn)     
-  return l.kap(t, function(_,v) return fn(v) end) end
+-- io --
+function lib.thing(s)
+  return s=="true" or 
+    (s~="false" and (math.tointeger(s) or tonumber(s) or s)) end
+function lib.things(file,     src)
+  src=assert(io.open(file))
+  return function(     s,t)
+    s=src:read(); if s then
+      t={}; for x in s:gmatch"[^,]+" do 
+        lib.push(t, lib.thing(lib.trim(x))) end; return t 
+    end end end
 
-function l.zap(t,fn)     
-  return l.map(t, function(x) return not fn(x) and x end) end
+-- math --
+function lib.bisect(t, x,    lo, hi, mid)
+  lo, hi = 1, #t
+  while lo <= hi do
+    mid = (lo + hi) // 2
+    if t[mid] <= x then lo = mid + 1 else hi = mid - 1 end end
+  return lo - 1 end
+function lib.weibull(k, lambda)
+  return lambda * (-log(1 - rand()))^(1/k) end
 
-function l.sort(t,fn)   
-  table.sort(t,fn); return t end
-
-function l.push(t,x)    
-  t[1+#t]=x; return x end
-
-function l.same(x) return x end
-
-function l.reduce(t, fn, init,    acc)
-  acc = init
-  l.kap(t, function(k, v) acc = fn(acc, k, v) end)
-  return acc end
-
-function l.max(t, fn)
-  return l.reduce(t, function(acc, k, v,      fv)
-    fv = (fn or l.same)(v)
-    return fv > (acc[2] or -math.huge) and {k, fv} or acc end, {})[2] end
-
-function l.sum(t, fn)
-  return l.reduce(t, function(acc, k, v) return acc + (fn or l.same)(v) end, 0) end
-
-function l.coerce(s,     fn)   
-  fn = function(s) return s=="true" and true or s ~= "false" and s end
-  return math.tointeger(s) or tonumber(s) or fn(l.trim(s)) end
-
-function l.cells(s,    u)
-  u = {}; for s1 in s:gmatch"([^,]+)" do u[#u+1]=l.coerce(s1) end; return u end
-
-function l.csv(file,fun,      src,s,cells,n)
-  src = io.input(file)
-  while true do
-    s = io.read()
-    if s then fun(l.cells(s)) else return io.close(src) end end end
-
-function l.o(x,    ok,two)
-  _out = function(k,v) if not tostring(s):find"^_" then return l.fmt(":%s %s",k,v) end end
-  if type(x) == "number" then return l.fmt((x%1)==0 and "%g" or "%.3f", x) end
-  if type(x) ~= "table"  then return tostring(x) end
-  return "{"..table.concat(#x>0 and l.map(x,l.o) or l.sort(l.kap(x,_out))," ").."}" end
-
-function l.oo(x) print(l.o(x)); return x end
-
-return l
+return lib

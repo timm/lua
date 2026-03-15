@@ -3,33 +3,35 @@
 -- (c) 2026 Tim Menzies timm@ieee.org, MIT license
 -- vim: set et sw=2 tw=90 :
 
+local lib = require"lib"
+local new,push,sort,map,sum,kv = lib.new,lib.push,lib.sort,lib.map,lib.sum,lib.kv
+local slice,many,shuffle   = lib.slice,lib.many,lib.shuffle
+local cat,trim,rat         = lib.cat,lib.trim,lib.rat
+local thing,things,bisect  = lib.thing,lib.things,lib.bisect
+local weibull              = lib.weibull
+
 the = {
-  leaf   = 3, 
+  leaf   = 2, 
   Budget = 50, 
   Check  = 5, 
   Show   = 30, 
   seed   = 1, 
   p      = 2,
-  -- Cliff's Delta: small=0.147, medium=0.33, large=0.474 (mid=0.24)
   cliffs = 0.195, 
-  -- K-S Confidence: 90%=1.22, 95%=1.36, 99%=1.63
   conf   = 1.36,  
-  -- Small Effect (Cohen's d): small=0.2, medium=0.5, large=0.8
   eps    = 0.35   
 }
 
-local floor,max,min,abs,log = math.floor,math.max,math.min,math.abs,math.log
+local floor,max,min,abs,log,exp = math.floor,math.max,math.min,math.abs,math.log,math.exp
 local rand,BIG = math.random, 1E32
 
 local NUM, SYM, COLS, DATA, TREE = {}, {}, {}, {}, {}
 local Num, Sym, Data, Tree, Cols
 
-local new,push,sort,map,sum,median,trim,cat,rat,thing,things,shuffle,adds,mink,bisect
-
 -- structs ------------------------------------------------------------------------------
 function Tree(score) return new(TREE, {score=score}) end
-function Sym(s, at)  return new(SYM, {txt=s or "", at=at or 0, has={}, most=0, n=0}) end
-function Num(s, at)  return new(NUM, {txt=s or "", at=at or 0, has={}, _ok=false, n=0,
+function Sym(s, at)  return new(SYM, {txt=s or "", at=at or 0, has={}, n=0}) end
+function Num(s, at)  return new(NUM, {txt=s or "", at=at or 0, n=0, mu=0, m2=0,
                                      goal=s and s:match"-$" and 0 or 1}) end
 
 function Cols(names,    x, y, all, col)
@@ -40,56 +42,85 @@ function Cols(names,    x, y, all, col)
   return new(COLS, {x=x, y=y, all=all, names=names}) end
 
 function Data(src,     d) 
-  d = new(DATA, {rows={}, cols=nil}) 
-  if type(src)=="string" then for row in things(src) do d:add(row) end 
-  else for _, row in ipairs(src or {}) do d:add(row) end end
+  d = new(DATA, {rows={}, cols=nil, _mid=nil}) 
+  if type(src)=="string" then for row in things(src) do add(d,row) end 
+  else for _, row in ipairs(src or {}) do add(d,row) end end
   return d end 
 
 function DATA.clone(i,rows) return adds(rows or {}, Data({i.cols.names})) end
 
--- update ------------------------------------------------------------------------------
-function NUM.add(i,v) 
-  if v~="?" then i.n=i.n+1; push(i.has,v); i._ok=false end; return v end
-function SYM.add(i,v)
-  if v~="?" then i.n=i.n+1; i.has[v]=(i.has[v] or 0)+1
-    if i.has[v]>i.most then i.most,i.mode=i.has[v],v end end; return v end
-function COLS.add(i,row) 
-  for _,c in ipairs(i.all) do c:add(row[c.at]) end; return row end
-function DATA.add(i,row)
-  if i.cols then i.cols:add(push(i.rows,row)) else i.cols=Cols(row) end end
+-- update -------------------------------------------------------------------------------
+function add(i,v,w) if v~="?" then i:add(v,w or 1) end; return v end
+function sub(i,v)   return i:add(v,-1) end
 
--- query ------------------------------------------------------------------------------
-function NUM.ok(i)   if not i._ok then sort(i.has) end; i._ok=true; return i end
-function NUM.mid(i)  return median(i:ok().has) end
-function SYM.mid(i)  return i.mode end
-function DATA.mid(i) return map(i.cols.all, function(c) return c:mid() end) end
+function NUM.add(i,v,w,    d)
+  i.n = i.n + w
+  if w < 0 and i.n <= 2 then i.n=0; i.mu=0; i.m2=0
+  elseif i.n > 0 then
+    d=v-i.mu; i.mu=i.mu+w*d/i.n; i.m2=i.m2+w*d*(v-i.mu) end end
 
-function NUM.spread(i,     t, n)
-  t, n = i:ok().has, #i.has; if n < 2 then return 0 end
-  return (t[max(1, floor(.9*n))] - t[max(1, floor(.1*n))]) / 2.56 end
+function SYM.add(i,v,w)
+  i.n = i.n + w; i.has[v] = (i.has[v] or 0) + w end
+
+function COLS.add(i,row,w) 
+  for _,c in ipairs(i.all) do add(c,row[c.at],w) end; return row end
+
+function DATA.add(i,row,w)
+  if not i.cols then i.cols=Cols(row) else
+    i._mid=nil; i.cols:add(row,w)
+    if w>0 then push(i.rows,row) else
+      for j,r in ipairs(i.rows) do
+        if r==row then table.remove(i.rows,j); break end end end end end
+
+-- query --------------------------------------------------------------------------------
+function NUM.mid(i)    return i.mu end
+function SYM.mid(i,     most,mode)
+  most = -1
+  for v,n in pairs(i.has) do if n>most then most,mode=n,v end end
+  return mode end
+function DATA.mid(i)
+  i._mid = i._mid or map(i.cols.all, function(c) return c:mid() end)
+  return i._mid end
+
+function NUM.spread(i)
+  return i.n > 1 and (max(0,i.m2)/(i.n - 1))^0.5 or 0 end
 function SYM.spread(i)
   return -sum(i.has, function(_, v) return (v/i.n) * log(v/i.n, 2) end) end
 
-function NUM.norm(i,v)
-  if v=="?" then return v end; if #i:ok().has<2 then return 0 end
-  return max(0, min(1, (v-i.has[1]) / (i.has[#i.has]-i.has[1]))) end
+function NUM.norm(i,v,     sd)
+  if v=="?" then return v end
+  sd = i:spread() + 1e-32
+  return 1/(1 + exp(-1.7*(v - i.mu)/sd)) end
+
+function adds(lst,     c) 
+  c=c or Num(); for _,v in ipairs(lst or {}) do add(c,v) end; return c end
+
+function mink(lst,     d,n)
+  d,n=0,0; for _,x in ipairs(lst) do n=n+1; d=d+abs(x)^the.p end
+  return n==0 and 0 or (d/n)^(1/the.p) end
 
 function DATA.disty(i,r,     fn)
   fn = function(c) return abs(c:norm(r[c.at]) - c.goal) end
   return mink(map(i.cols.y, fn)) end
 
--- tree ---------------------------------------------------------------------------------
+function wins(d,     ds, lo, med)
+  ds = sort(map(d.rows, function(r) return d:disty(r) end))
+  lo, med = ds[1], ds[floor(#ds/2)+1]
+  return function(r)
+    return floor(100*(1 - ((d:disty(r) - lo) / (med - lo + 1e-32)))) end end
+
+-- tree ---------------------------------------------------------------------------------
 function TREE.build(i, d, rows,     mid, best, bestW, w)
-  mid = d:clone(rows):mid(); i.mids = {}
+  mid = d:clone(rows):mid()
   i.y = adds(map(rows, function(r) return i.score(r) end))
-  for _, c in ipairs(d.cols.y) do i.mids[c.txt] = mid[c.at] end
+  i.mids = kv(d.cols.y, function(c) return c.txt end, 
+                         function(c) return mid[c.at] end)
   if #rows < 2*the.leaf then return i end; best, bestW = nil, BIG
   for _, col in ipairs(d.cols.x) do
-    for _, sp in ipairs(col:splits(rows)) do
-      w = sum({sp.left, sp.right}, function(_, s)
-            return adds(map(s, function(r) return i.score(r) end)):spread() * #s end)
-      if w < bestW then best = {col=col, cut=sp.cut, left=sp.left, 
-                                right=sp.right}; bestW = w end end end
+    for _, sp in ipairs(col:splits(rows, i.score)) do
+      w = sp.lhs.n * sp.lhs:spread() + sp.rhs.n * sp.rhs:spread()
+      if w < bestW and min(#sp.left,#sp.right) >= the.leaf then 
+        best = sp; bestW = w end end end
   if best then
     i.col, i.cut, i.at = best.col, best.cut, best.col.at
     i.left  = Tree(i.score):build(d, best.left) 
@@ -121,129 +152,111 @@ function TREE.show(i)
       s, rat(n.y:mid()), n.y.n, rat(n.mids))) end) end
 
 -- splits -------------------------------------------------------------------------------
-local function step(rows, at, fn,     left, right)
-  left, right = {}, {}
+local function split(col, rows, score, cut, test,
+                     lhs, rhs, L, R, go)
+  lhs, rhs, L, R = Num(), Num(), {}, {}
   for _, r in ipairs(rows) do
-    if r[at]~="?" then push(fn(r[at]) and left or right, r) end end
-  if #left>=the.leaf and #right>=the.leaf then return left, right end end
+    go = r[col.at]=="?" or test(r[col.at])
+    push(go and L or R, r); add(go and lhs or rhs, score(r))
+  end
+  if #L>=the.leaf and #R>=the.leaf then
+    return {col=col,cut=cut,left=L,right=R,lhs=lhs,rhs=rhs} end end
 
-function NUM.splits(i, rows,     vals, med, l, r)
-  vals = {}; for _, r in ipairs(rows) do if r[i.at]~="?" then push(vals, r[i.at]) end end
-  if #vals < 2 then return {} end; sort(vals); med = vals[floor(#vals/2)+1]
-  l, r = step(rows, i.at, function(v) return v <= med end)
-  return l and {{cut=med, left=l, right=r}} or {} end
+function NUM.splits(i, rows, score,     vals, med, sp)
+  vals = {}
+  for _,r in ipairs(rows) do 
+    if r[i.at]~="?" then push(vals,r[i.at]) end end
+  if #vals<2 then return {} end
+  sort(vals); med=vals[floor(#vals/2)+1]
+  sp = split(i,rows,score,med, function(v) return v<=med end)
+  return sp and {sp} or {} end
 
-function SYM.splits(i, rows,     seen, out, l, r)
+function SYM.splits(i, rows, score,     seen, out, sp)
   seen, out = {}, {}
   for _, row in ipairs(rows) do
     local v = row[i.at]
     if v~="?" and not seen[v] then seen[v]=true
-      l, r = step(rows, i.at, function(x) return x == v end)
-      if l then push(out, {cut=v, left=l, right=r}) end end end; return out end
-
--- lib ----------------------------------------------------------------------------------
-function new(kl,obj)     kl.__index=kl; return setmetatable(obj,kl) end
-function push(t,x)       t[#t+1]=x; return x end
-function sort(t,fn)      table.sort(t,fn); return t end
-function map(t,f,     u) u={}; for i,x in ipairs(t) do u[i]=f(x) end; return u end
-function sum(t,f,     n) n=0; for k,v in pairs(t) do n=n+f(k,v) end; return n end
-function median(t)       return t[floor(#t/2)+1] or 0 end
-function trim(s)         return s:match"^%s*(.-)%s*$" end
-function cat(t)          return "{"..table.concat(t,", ").."}" end
-
-function rat(x,     u)
-  if math.type(x)=="float" then return string.format("%.2f",x) end
-  if type(x)~="table"      then return tostring(x) end
-  if #x>0                  then return cat(map(x,rat)) end
-  u={}; for k,v in pairs(x) do u[#u+1]=k.."="..rat(v) end
-  return cat(sort(u)) end
-
-function thing(s)
-  return s=="true" or (s~="false" and (math.tointeger(s) or tonumber(s) or s)) end
-
-function things(file,     src)
-  src=assert(io.open(file))
-  return function(     s,t)
-    s=src:read(); if s then
-      t={}; for x in s:gmatch("[^,]+") do push(t,thing(trim(x))) end; return t end end end
-
-function shuffle(t,     j)
-  for i=#t,2,-1 do j=rand(i); t[i],t[j]=t[j],t[i] end; return t end
-
-function adds(lst,     c) 
-  c=c or Num(); for _,v in ipairs(lst or {}) do c:add(v) end; return c end
-
-function mink(lst,     d,n)
-  d,n=0,0; for _,x in ipairs(lst) do n=n+1; d=d+abs(x)^the.p end
-  return n==0 and 0 or (d/n)^(1/the.p) end
-
-function bisect(t, x,    lo, hi, mid)
-  lo, hi = 1, #t
-  while lo <= hi do
-    mid = (lo + hi) // 2
-    if t[mid] <= x then lo = mid + 1 else hi = mid - 1 end end
-  return lo - 1 end
-
-local function weibull(k, lambda)
-  return lambda * (-log(1 - rand()))^(1/k) end
+      sp = split(i,rows,score,v, function(x) return x==v end)
+      if sp then push(out, sp) end
+    end end; return out end
 
 -- stats --------------------------------------------------------------------------------
-local function same(x, y, eps,    n, m, xs, ys, _cliffs, _ks)
-  x:ok(); y:ok(); xs, ys = x.has, y.has; n, m = #xs, #ys
-  -- Fast-fail: if medians are closer than eps * overall_spread
+local function same(xs, ys, eps,    n, m, gt, lt, ks, f)
+  xs, ys = sort(xs), sort(ys); n, m = #xs, #ys
   if abs(xs[n//2+1] - ys[m//2+1]) <= eps then return true end
-  _cliffs = function(    gt, lt)
-    gt, lt = 0, 0
-    for _, a in ipairs(xs) do
-      gt, lt = gt + bisect(ys, a - 1e-9), lt + (m - bisect(ys, a)) end
-    return abs(gt - lt) / (n * m) end
-  _ks = function(    d, f)
-    d, f = 0, function(v) return abs(bisect(xs,v)/n - bisect(ys,v)/m) end
-    for _, v in ipairs(xs) do d = max(d, f(v)) end
-    for _, v in ipairs(ys) do d = max(d, f(v)) end
-    return d end
-  return _cliffs() <= the.cliffs and _ks() <= the.conf * ((n+m)/(n*m))^0.5 end
+  gt, lt = 0, 0
+  for _, a in ipairs(xs) do
+    gt = gt + bisect(ys, a); lt = lt + (m - bisect(ys, a + 1e-32)) end
+  if abs(gt - lt) / (n * m) > the.cliffs then return false end
+  ks, f = 0, function(v) return abs(bisect(xs,v)/n - bisect(ys,v)/m) end
+  for _, v in ipairs(xs) do ks = max(ks, f(v)) end
+  for _, v in ipairs(ys) do ks = max(ks, f(v)) end
+  return ks <= the.conf * ((n+m)/(n*m))^0.5 end
 
-function bestRanks(dict,    all, num_all, best)
-  all, num_all = {}, Num("overall")
+function bestRanks(dict,    items, k0, lst0, best)
+  items = {}
   for name, lst in pairs(dict) do
-    adds(adds(lst, push(all, Num(name))).has, num_all) end
-  sort(all, function(a, b) return a:mid() < b:mid() end)
-  best = {all[1]}
-  for j = 2, #all do
-    if same(all[1], all[j], num_all:spread() * the.eps) then push(best, all[j])
+    sort(lst); push(items, {name, lst, lst[floor(#lst/2)+1]}) end
+  sort(items, function(a,b) return a[3] < b[3] end)
+  k0, lst0 = items[1][1], items[1][2]
+  best = {}; best[k0] = adds(lst0, Num(k0))
+  for j = 2, #items do
+    local k, lst = items[j][1], items[j][2]
+    if same(lst0, lst, best[k0]:spread() * the.eps) then
+      best[k] = adds(lst, Num(k))
     else break end end
   return best end
 
 -- eg -----------------------------------------------------------------------------------
 eg = {}
-function eg.data(f,     d, rows, sub)
-  d = Data(); for row in things(f) do d:add(row) end
-  rows = shuffle(d.rows); sub = {}
-  for i=1, min(the.Budget, #rows) do push(sub, rows[i]) end; d = d:clone(sub)
+
+function eg.csv(f,     n)
+  n=0; for row in things(f) do
+    if n%30==0 then print(cat(map(row,rat))) end; n=n+1 end end
+
+function eg.data(f,     d)
+  d = Data(f)
+  for _, c in ipairs(d.cols.y) do
+    print(string.format("%s: n=%d mid=%s spread=%s",
+          c.txt, c.n, rat(c:mid()), rat(c:spread()))) end end
+
+function eg.tree(f,     d, sub)
+  d = Data(f); sub = many(d.rows, the.Budget); d = d:clone(sub)
   Tree(function(r) return d:disty(r) end):build(d, d.rows):show() end
 
 function eg.ranks(    dict)
   dict = {}
   for i = 1, 20 do
     local name = "t" .. i; dict[name] = {}
-    -- Treatment 1-5 are "best" (k=2, lambda=10)
-    -- Treatment 6-20 are "worse" (k=1, lambda=20)
     local k, l = (i <= 5 and 2 or 1), (i <= 5 and 10 or 20)
     for _ = 1, 50 do push(dict[name], weibull(k, l)) end end
-  
-  local winners = bestRanks(dict)
   print("\nTop Tier Treatments:")
-  for _, num in ipairs(winners) do
-    print(string.format("  %-5s median: %s", num.txt, rat(num:mid()))) end end
+  for k, num in pairs(bestRanks(dict)) do
+    print(string.format("  %-5s median: %s", k, rat(num:mid()))) end end
+
+function eg.test(f,     d, outs, win, n, test, d2, t, top)
+  d = Data(f); outs = Num("win"); win = wins(d)
+  for _ = 1, 20 do
+    shuffle(d.rows); n = #d.rows // 2
+    test = slice(d.rows, n+1)
+    d2 = d:clone(slice(d.rows, 1, min(n, the.Budget)))
+    t = Tree(function(r) return d2:disty(r) end):build(d2, d2.rows)
+    sort(test, function(a,b) return t:leaf(a).y:mid() < t:leaf(b).y:mid() end)
+    top = sort(slice(test, 1, the.Check),
+               function(a,b) return d2:disty(a) < d2:disty(b) end)
+    add(outs, win(top[1]))
+  end
+  print(rat(floor(outs:mid()))) end
 
 -- main ---------------------------------------------------------------------------------
-local function main(     k, i)
+local function main(     k, i, v)
   i = 1; while i <= #arg do
     k = arg[i]:match"^%-%-?(.+)"; i = i + 1
     if k then
       math.randomseed(the.seed) 
-      if eg[k] then eg[k](arg[i]); i = i + 1
+      if eg[k] then
+        v = arg[i] and not arg[i]:match"^%-" and arg[i] or nil
+        if v then i = i + 1 end; eg[k](v)
       elseif the[k]~=nil then the[k] = thing(arg[i]); i = i + 1 end end end end
 
 math.randomseed(the.seed) 
