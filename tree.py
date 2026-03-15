@@ -48,19 +48,19 @@ from types import SimpleNamespace as S
 # --- Types ----
 type Qty  = int | float
 type Atom = str | bool | Qty
-type X    = list[Atom]
-type Y    = list[Qty]
-type Row  = (X,Y)
-type Rows = list[Row]
-type Col  = Num | Sym
-type Cols = list[Col]
-type Data = (Rows, Cols)
-type Tree = Data | (Data, Tree, Tree)
+type X    = list[Atom]                # independent inputs
+type Y    = [Qty]                     # dependent output goals
+type Row  = (X,Y)                     # one example of inputs --> goals
+type Rows = list[Row]                 # many 'Row's
+type Col  = Num | Sym                 # A Col summarizes numbers,symbols
+type Cols = list[Col]                 # many 'Col's
+type Data = (Rows, Cols)              # Rows, summarized in Cols
+type Tree = Data | (Data, Tree, Tree) # binary tree of Data
 
 # --- Create ----
 class Tree:
   """A binary decision tree node."""
-  def __init__(i, d, rs):
+  def __init__(i, d:Data, rs:Rows):
     i.d = clone(d, rs)
     i.col,i.cut,i.L,i.R = 0,0,None,None
 
@@ -140,17 +140,17 @@ def norm(n: Num, v:Qty) -> float:
   sd = spread(n) + 1e-32
   return v if v=="?" else 1/(1 + exp(-1.7 * (v - n.mu)/sd))
 
-def mink(items):
+def mink(items:Iterable[Qty]):
   """Calculates Minkowski distance for a list of items."""
   d,n = 0, 1e-32
   for item in items: d,n = d+item**the.p, n+1
   return (d/n) ** (1/the.p)
 
-def disty(d: Data, r: list) -> float:
+def disty(d: Data, r: Row) -> float:
   """Measures how far a row is from the theoretical 'perfect' row."""
   return mink(abs(norm(c, r[c.at]) - c.goal) for c in d.cols.y)
 
-def scoresy(d, rs=None): 
+def scoresy(d, rs:Rows=None): 
   """Calculates distances for a set of rows."""
   return adds(disty(d, r) for r in (rs or d.rows))
 
@@ -159,7 +159,7 @@ def goals(d: Data) -> dict:
   return {c.txt: mid(c) for c in d.cols.y}
 
 # --- Tree ---
-def splits(c: Col, rs: list, d: Data):
+def splits(c: Col, rs: Rows, d: Data):
   """Yields proposed column cuts, returning the left/right splits and their spread."""
   if vs := [r[c.at] for r in rs if r[c.at] != "?"]:
     cuts = set(vs) if type(c)==Sym else [sorted(vs)[len(vs)//2]]
@@ -172,7 +172,7 @@ def splits(c: Col, rs: list, d: Data):
         add(lhs if go else rhs, disty(d, r))
       yield cut, L, R, lhs.n*spread(lhs)+rhs.n*spread(rhs)
 
-def build(d, rs):
+def build(d:Data, rs:Rows):
   """Recursively builds a decision tree by finding the best splits."""
   def _kids(t):
     bestW, best = 1e32, None
@@ -231,7 +231,7 @@ def same(xs: list, ys: list, eps: float) -> bool:
   return max(max(map(ks,xs)), max(map(ks,ys))) \
           <= the.stats.conf * ((n+m)/(n*m))**0.5
 
-def bestRanks(d: dict) -> dict:
+def bestRanks(d: dict[str|list[Qty]]) -> dict:
   """Sorts and groups multiple treatments into top-tier statistical ranks."""
   items = sorted(d.items(),
                  key=lambda kv: sorted(kv[1])[len(kv[1])//2])
@@ -250,7 +250,7 @@ def thing(s: str) -> Atom:
     try: return f(s)
     except ValueError: pass
 
-def o(x):
+def o(x:Any):
   """Recursively formats objects for neat printing."""
   of=type(x)
   if of==float: return f"{x:.{the.show.Decimals}f}"

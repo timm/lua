@@ -123,23 +123,23 @@ endef
 export AWK_SCRIPT
 
 define HEADER_HTML
-<div class="custom-header" style="background:#f5f5f5; padding:10px 20px; border-bottom:1px solid #ccc; font-family:sans-serif; display: flex; justify-content: space-between; align-items: center;">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<div class="custom-header" style="background:#f8f9fa; padding:12px 30px; border-bottom:1px solid #ddd; font-family:Optima, Candara, sans-serif; display: flex; justify-content: space-between; align-items: center; overflow-x: auto; white-space: nowrap;">
   
-  <div>
-    <strong>tree.py</strong> | 
-    <span style="color:#666; font-size:0.9em;">Explainable Multi-Objective Optimization</span>
+  <div style="font-size: 1.05em; font-weight: 500; display: flex; gap: 20px; flex-shrink: 0; white-space: nowrap;">
+    <a href="https://github.com/timm/PROJECT" target="_blank" style="text-decoration:none; color:#0366d6; display: flex; align-items: center; gap: 5px;">
+      <i class="fa-brands fa-github"></i> GitHub <i class="fa-solid fa-arrow-up-right-from-square" style="font-size:0.7em;"></i>
+    </a>
+    <a href="https://github.com/timm/PROJECT/issues" target="_blank" style="text-decoration:none; color:#0366d6; display: flex; align-items: center; gap: 5px;">
+      <i class="fa-solid fa-circle-exclamation"></i> Issues <i class="fa-solid fa-arrow-up-right-from-square" style="font-size:0.7em;"></i>
+    </a>
   </div>
 
-  <div style="font-size: 0.9em;">
-    <a href="https://github.com/timm/PROJECT" style="text-decoration:none; color:#0366d6;">GitHub</a> &bull; 
-    <a href="https://github.com/timm/PROJECT/issues" style="text-decoration:none; color:#0366d6;">Issues</a>
-  </div>
-
-  <div style="display: flex; gap: 8px; align-items: center;">
-    <img src="https://img.shields.io/badge/python-3.12+-blue.svg" alt="Python 3.12+" style="height: 20px; width: auto;">
-    <img src="https://img.shields.io/badge/topic-Explainable%20AI-purple.svg" alt="Explainable AI" style="height: 20px; width: auto;">
-    <a href="https://opensource.org/licenses/MIT" target="_blank" style="display: flex; align-items: center;">
-      <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License: MIT" style="border:none; height: 20px; width: auto;">
+  <div style="display: flex; gap: 10px; align-items: center; flex-shrink: 0; margin-left: 20px;">
+    <img src="https://img.shields.io/badge/python-3.12+-3776ab.svg?style=flat-square&logo=python&logoColor=white" style="height:22px;" alt="Python">
+    <img src="https://img.shields.io/badge/topic-XAI-purple.svg?style=flat-square" style="height:22px;" alt="XAI">
+    <a href="https://opensource.org/licenses/MIT" target="_blank" style="display:flex; align-items:center;">
+      <img src="https://img.shields.io/badge/license-MIT-green.svg?style=flat-square" style="height:22px; border:none;" alt="MIT">
     </a>
   </div>
 
@@ -148,44 +148,46 @@ endef
 export HEADER_HTML
 
 define CUSTOM_CSS
-/* 1. Premium Typography Stack */
-body, div.docs, p {
-  /* Optima/Candara for Mac/Win (Humanist), then falling back to Verdana for readability */
-  font-family: Optima, Candara, "Noto Sans", source-sans-pro, sans-serif !important;
-  font-size: 15px;
-  color: #333;
+/* 1. Fonts and Basic Styling */
+body, div.docs, p { 
+  font-family: Optima, Candara, "Noto Sans", sans-serif !important; 
+  font-size: 15px; 
+  color: #333; 
 }
+pre, code, .code { font-family: "JetBrains Mono", "Fira Code", monospace !important; }
 
-/* 2. Distinctive Header Font */
-div.docs h1, div.docs h2, div.docs h3 {
-  /* Trebuchet is slightly more "engineered" and works great for tech docs */
-  font-family: "Trebuchet MS", "Lucida Grande", "Lucida Sans Unicode", "Lucida Sans", Tahoma, sans-serif !important;
-  font-weight: bold;
-  text-align: left !important;
-  border-bottom: 1px solid #ddd;
-  margin-top: 40px;
-  display: block; 
-  width: 100%;
-}
-div.docs h3 { border-bottom: 0px; }
+/* 2. GAP KILLER: Remove Pycco's default top padding/margins */
+#container { margin-top: 0 !important; }
+div.docs, div.code { padding-top: 10px !important; }
 
 /* 3. The "Hugging" Text */
-div.docs, div.docs p {
-  text-align: right !important;
-  padding-right: 30px !important;
+div.docs, div.docs p { text-align: right !important; padding-right: 35px !important; }
+
+/* 4. Left-Anchored Headers */
+div.docs h1, div.docs h2, div.docs h3 { 
+  text-align: left !important; 
+  border-bottom: 1px solid #eee; 
+  width: 100%; display: block;
+  margin-top: 40px; /* Space between sections */
 }
 
-/* 4. Left-Anchored Code */
+/* 5. Special case: First H1 should have almost no top margin */
+div.docs h1:first-child, 
+div.section:first-child h1 { 
+  margin-top: 5px !important; 
+}
+
+div.docs h3 { border-bottom: none; color: #555; }
+
+/* 6. LHS Code Blocks */
 div.docs pre {
-  font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", "Courier New", monospace !important;
   text-align: left !important;
-  display: block;
-  margin: 15px 0 !important;
-  font-size: 0.7em !important;
-  background: #fbfbfb; /* Slightly warmer than pure white */
-  padding: 12px;
+  margin: 20px 0 !important;
+  font-size: 0.75em !important;
+  background: #fdfdfd;
+  padding: 15px;
   border: 1px solid #eee;
-  border-left: 3px solid #7D9029; /* Subtle green accent to match your license badge */
+  border-left: 4px solid #7D9029;
 }
 endef
 export CUSTOM_CSS
