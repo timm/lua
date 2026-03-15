@@ -5,6 +5,8 @@ tree.py: explainable multi-objective optimization
   
 Options:   
     -h                    show help on command line options  
+    --seed=1              set random number seed   
+    --p=2                 set distance type (1 is Manhattan, 2 is Euclidean)   
     --learn.leaf=3        set examples per leaves in a tree   
     --learn.Budget=50     set number of rows to evaluate   
     --learn.Check=5       set number of guesses to check   
@@ -13,14 +15,8 @@ Options:
     --stats.eps=0.35      set margin of error multiplier   
     --show.Show=30        set display width/padding for trees   
     --show.Decimals=2     set number of decimals for float formatting   
-    --seed=1              set random number seed   
-    --p=2                 set distance parameter (1=Manhattan, 2=Euclidean)   
-    --the                 print the configuration object
-    --csv   <str>         read csv and print every 30th row
-    --data  <str>         load data and print y-column stats
     --tree  <str>         build and print a decision tree
-    --ranks               run best ranks statistical demo
-    --test  <str>         run optimization test, make predictions, print score
+    --all   file          run all tests/examples using  csv file
 
 Input is CSV. Header (row 1) defines column roles as follows:   
     [A-Z]* : Numeric (e.g. "Age").     [a-z]* : Symbolic (e.g. "job").   
@@ -32,6 +28,9 @@ To install and test, download http://githib.com/timm/lua/tree.py. Then:
     mkdir -p $HOME/gits   # download sample data    
     git clone http://github.com/timm/moot $HOME/gits/moot   
     ./tree.py --tree ~/gits/moot/optimize/misc/auto93.csv   
+
+To fun all tests (verbose output):
+    ./tree.py --all ~/gits/moot/optimize/misc/auto93.csv   
 """
 from time import perf_counter_ns as now
 import re, random, sys, bisect
@@ -53,24 +52,29 @@ type Tree = Data | (Data, Tree, Tree)
 
 # --- Create ----
 class Tree:
+  """A binary decision tree node."""
   def __init__(i, d, rs):
     i.d = clone(d, rs)
     i.col,i.cut,i.L,i.R = 0,0,None,None
 
 class Num:
+  """Summarizes continuous numbers (keeps a running mean and variance)."""
   def __init__(i, s="", a=0):
     i.txt,i.at,i.n,i.mu,i.m2,i.goal = s,a,0,0,0,s[-1:]!="-"
 
 class Sym:
+  """Summarizes categorical data (keeps a frequency count)."""
   def __init__(i, s="", a=0): i.txt,i.at,i.n,i.has = s,a,0,{}
 
 class Data:
+  """Holds tabular rows and separates X (independent) from Y (dependent) cols."""
   def __init__(i,src=None):
     src = iter(src or {})
     i.rows, i.cols, i._mid = [], Cols(next(src)), None
     adds(src,i)
 
 class Cols:
+  """Parses column headers to assign types (Num/Sym) and roles (X/Y)."""
   def __init__(i, n: list[str]):
     i.names, i.x, i.y, i.all = n, [], [], []
     for j,s in enumerate(n):
@@ -79,15 +83,20 @@ class Cols:
         (i.y if s[-1] in "+-!" else i.x).append(i.all[-1])
 
 def clone(d: Data, rs: list=None) -> Data:
+  """Creates an empty Data object with the same columns as the original."""
   return adds(rs or [], Data([d.cols.names]))
 
 # --- Update ----
 def adds(src: Iterable, it=None) -> Data | Col:
+  """Sequentially adds items to a Data object or Column."""
   it = it or Num(); [add(it, v) for v in (src or [])]; return it
 
-def sub(x, v:Any): return add(x,v,-1)
+def sub(x, v:Any): 
+  """Removes an item from a summary (decrements counts)."""
+  return add(x,v,-1)
 
 def add(x, v:Any, w:int=1) -> Any:
+  """Updates Column summaries (Welford's algorithm) or adds rows to Data."""
   if v == "?": return v
   if  type(x) == Cols: [add(c, v[c.at],w) for c in x.all]
   elif type(x) == Data:
@@ -105,38 +114,46 @@ def add(x, v:Any, w:int=1) -> Any:
     else: x.has[v] = w + x.has.get(v, 0)
   return v
 
-# --- Query ----
+# --- Query ----
 def mid(x:Col) -> Atom | Row:
+  """Returns the central tendency (mean for Num, mode for Sym)."""
   if type(x)==Num: return x.mu
   if type(x)==Sym: return max(x.has, key=x.has.get)
   x._mid = x._mid or [mid(c) for c in x.cols.all]
   return x._mid
 
 def spread(x:Col) -> Qty:
+  """Returns the variation (standard deviation for Num, entropy for Sym)."""
   if type(x) == Sym:
     return -sum(v/x.n*log2(v/x.n) for v in x.has.values())
   return (max(0,x.m2)/(x.n - 1))**.5 if x.n > 1 else 0
 
 def norm(n: Num, v:Qty) -> float:
+  """Squashes a number to a 0..1 scale based on its column distribution."""
   sd = spread(n) + 1e-32
   return v if v=="?" else 1/(1 + exp(-1.7 * (v - n.mu)/sd))
 
 def mink(items):
+  """Calculates Minkowski distance for a list of items."""
   d,n = 0, 1e-32
   for item in items: d,n = d+item**the.p, n+1
   return (d/n) ** (1/the.p)
 
 def disty(d: Data, r: list) -> float:
+  """Measures how far a row is from the theoretical 'perfect' row."""
   return mink(abs(norm(c, r[c.at]) - c.goal) for c in d.cols.y)
 
 def scoresy(d, rs=None): 
+  """Calculates distances for a set of rows."""
   return adds(disty(d, r) for r in (rs or d.rows))
 
 def goals(d: Data) -> dict: 
+  """Returns the midpoints (mean/mode) for all Y columns."""
   return {c.txt: mid(c) for c in d.cols.y}
 
 # --- Tree ---
 def splits(c: Col, rs: list, d: Data):
+  """Yields proposed column cuts, returning the left/right splits and their spread."""
   if vs := [r[c.at] for r in rs if r[c.at] != "?"]:
     cuts = set(vs) if type(c)==Sym else [sorted(vs)[len(vs)//2]]
     for cut in cuts:
@@ -149,6 +166,7 @@ def splits(c: Col, rs: list, d: Data):
       yield cut, L, R, lhs.n*spread(lhs)+rhs.n*spread(rhs)
 
 def build(d, rs):
+  """Recursively builds a decision tree by finding the best splits."""
   def _branch(t):
     bestW, best = 1e32, None
     for c in t.d.cols.x:
@@ -165,6 +183,7 @@ def build(d, rs):
   return _node(Tree(d, rs))
 
 def nodes(t: Tree, l=0, col=None, op="", cut=None):
+  """Yields nodes of the tree for traversal."""
   yield t, l, col, op, cut
   if t.L:
     ops = ("<=",">") if type(t.col)==Num else ("==","!=")
@@ -173,6 +192,7 @@ def nodes(t: Tree, l=0, col=None, op="", cut=None):
       yield from nodes(k, l+1, t.col, op_s, t.cut)
 
 def showTree(t: Tree):
+  """Visually prints the decision tree to the console."""
   for n, l, col, op, cut in nodes(t):
     p = f"{col.txt} {op} {o(cut)}" if col else ""
     print(f"{'|   '*(l-1)+p if l>0 else '':<{the.show.Show}}"
@@ -180,6 +200,7 @@ def showTree(t: Tree):
           f",({n.y.n:3}), {o(n.mids)}")
 
 def leaf(t: Tree, r: Row) -> Tree:
+  """Drops a row down the tree to find its matching leaf node."""
   if not t.L: return t
   v = r[t.col.at]
   go = (v != "?" and (v<=t.cut if type(t.col)==Num else v==t.cut))
@@ -187,6 +208,7 @@ def leaf(t: Tree, r: Row) -> Tree:
 
 # --- Stats ---
 def same(xs: list, ys: list, eps: float) -> bool:
+  """Checks if distributions are similar via pragmatic, effect size, and stat tests."""
   xs, ys = sorted(xs), sorted(ys)
   n, m = len(xs), len(ys)
   if abs(xs[n//2] - ys[m//2]) <= eps: return True
@@ -201,6 +223,7 @@ def same(xs: list, ys: list, eps: float) -> bool:
           <= the.stats.conf * ((n+m)/(n*m))**0.5
 
 def bestRanks(d: dict) -> dict:
+  """Sorts and groups multiple treatments into top-tier statistical ranks."""
   items = sorted(d.items(),
                  key=lambda kv: sorted(kv[1])[len(kv[1])//2])
   k0, lst0 = items[0]
@@ -211,13 +234,15 @@ def bestRanks(d: dict) -> dict:
     else: break
   return best
 
-# --- Misc ---
+# --- Misc ---
 def thing(s: str) -> Atom:
+  """Safely coerces strings into numbers or booleans."""
   for f in [int,float,lambda s:{"true":1,"false":0}.get(s.lower(),s)]:
     try: return f(s)
     except ValueError: pass
 
 def o(x):
+  """Recursively formats objects for neat printing."""
   of=type(x)
   if of==float: return f"{x:.{the.show.Decimals}f}"
   if of==dict: return "{"+", ".join(f"{k}={o(x[k])}" for k in x)+"}"
@@ -226,6 +251,7 @@ def o(x):
   return str(x)
 
 def csv(f, clean=lambda s: s.partition("#")[0].split(",")):
+  """Yields rows from a CSV file, skipping comments and empty whitespace."""
   with open(f, encoding="utf-8") as file:
     for s in file:
       r = clean(s)
@@ -233,16 +259,19 @@ def csv(f, clean=lambda s: s.partition("#")[0].split(",")):
         yield [thing(x.strip()) for x in r]
 
 def wins(d: Data):
+  """Returns a function that normalizes a row's distance into a 0-100 score."""
   ds = [disty(d, r) for r in d.rows]
   lo, med = min(ds), sorted(ds)[len(ds)//2]
   return lambda r: int(100*(1-((disty(d,r)-lo) / (med-lo+1e-32))))
 
 def set_dot(t, k, v):
+  """Sets a value in a nested namespace using dot notation (e.g., 'a.b.c')."""
   for x in (ks := k.split("."))[:-1]:
     t=t.__dict__.setdefault(x, S())
   setattr(t, ks[-1], v)
 
 def cli(fns, the):
+  """Executes functions or updates the configuration object via CLI arguments."""
   args = sys.argv[1:]
   while args:
     random.seed(the.seed)
@@ -252,47 +281,92 @@ def cli(fns, the):
     else:
       set_dot(the, k, thing(args.pop(0)))  
 
-# --- Examples ---
-def eg_h(): print(__doc__)
+# --- Examples ---
+def eg_h(): 
+  """Show help."""
+  print(__doc__)
 
-def eg_the():  print(o(the))
+def eg_the():  
+  """Check config defaults."""
+  print(o(the)); assert the.seed == 1
+
+def eg_thing():
+  """Test type coercion."""
+  assert thing("3.14") == 3.14 and thing("true") in [True, 1]
+
+def eg_num():
+  """Test Welford's algorithm for mean and spread."""
+  n = adds([10, 20, 30, 40, 50])
+  assert n.mu == 30 and 15.8 < spread(n) < 15.9
+
+def eg_sym():
+  """Test symbol counting and entropy."""
+  s = adds("aaabbc", Sym())
+  assert mid(s) == "a" and 1.4 < spread(s) < 1.5
 
 def eg_csv(f: str):
-  [print(row) for n,row in enumerate(csv(f)) if n%30==0]
+  """Test reading CSV rows."""
+  rows = list(csv(f))
+  assert len(rows) > 0; print(f"First row: {rows[0]}")
 
 def eg_data(f: str):
-  [print(o(col)) for col in Data(csv(f)).cols.y]
+  """Test Data object creation and column identification."""
+  d = Data(csv(f))
+  assert len(d.rows) > 0 and len(d.cols.y) > 0
+
+def eg_dist(f: str):
+  """Test distance calculation to 'perfect' row."""
+  d = Data(csv(f))
+  assert 0 <= disty(d, d.rows[0]) <= 1
 
 def eg_tree(f: str):
-  d = Data(csv(f))
-  random.shuffle(d.rows)
-  d2 = clone(d, d.rows[:the.learn.Budget])
-  showTree(build(d2, d2.rows))
+  """Build and print a decision tree."""
+  d = Data(csv(f)); random.shuffle(d.rows)
+  rows = d.rows[:the.learn.Budget]
+  t = build(clone(d, rows), rows)
+  assert hasattr(t, "d") and len(t.d.rows) > 0
+  showTree(t)
+
+def eg_same():
+  """Test statistical significance math."""
+  assert same([1, 2, 3], [1, 2, 3], 0.1)
+  assert not same([1, 2, 3], [10, 20, 30], 0.1)
 
 def eg_ranks():
-  d = {}
-  for j in range(1, 21):
-    k, lam = (2, 10) if j <= 5 else (1, 20)
-    d[f"t{j}"] = [lam*(-log(1-random.random()))**(1/k)
-                   for _ in range(50)]
-  print("\nTop Tier Treatments:")
-  for k, num in bestRanks(d).items(): 
-    print(f"  {k:<5} median: {o(mid(num))}")
+  """Sort 50 treatments, find best statistical tier."""
+  d = {f"t{j}": 
+       [(10 if j<=5 else 20)*(-log(1-random.random()))**
+        (1/(2 if j<=5 else 1)) for _ in range(50)]
+       for j in range(1, 21)}
+  [print(f"  {k:<5} median: {o(mid(n))}") 
+   for k,n in bestRanks(d).items()]
 
 def eg_test(f: str):
-  d, outs = Data(csv(f)), Num("win")
-  win = wins(d)
+  """Run full train/predict/score pipeline."""
+  d = Data(csv(f))
+  outs, win = Num("win"), wins(d)
   for _ in range(20):
     random.shuffle(d.rows)
-    n = len(d.rows) // 2
+    n          = len(d.rows) // 2
     train,test = d.rows[:n][:the.learn.Budget], d.rows[n:]
-    d2 = clone(d, train)
-    t = build(d2, d2.rows)
-    guess = sorted(test,key=lambda r: mid(leaf(t, r).y))
+    d2         = clone(d, train)
+    t          = build(d2, d2.rows)
+    guess      = sorted(test, key=lambda r: mid(leaf(t, r).y))
     top = min(guess[:the.learn.Check], key=lambda r: disty(d2, r))
     add(outs, win(top))
-  print(o(int(mid(outs))))
+  print(int(mid(outs)))
 
+def eg_all(f: str):
+  """Run all tests, print docstrings, let exceptions crash naturally."""
+  egs = {k: v for k, v in globals().items() if k.startswith("eg_") 
+         and k not in ["eg_all", "eg_h"]}
+  for k, fn in egs.items():
+    print(f"\n--- {k} ---")
+    if fn.__doc__: print(fn.__doc__)
+    random.seed(the.seed)
+    fn(f) if "f" in fn.__annotations__ else fn()
+
+# -- Start up --
 the = S()
 for k, v in re.findall(r"([\w.]+)=(\S+)", __doc__):
   set_dot(the, k, thing(v)) 
