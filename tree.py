@@ -2,26 +2,9 @@
 """
 tree.py: explainable multi-objective optimization   
 (c) 2026 Tim Menzies, timm@ieee.org, MIT license   
-   
-Input is CSV. Header (row 1) defines column roles as follows:   
-
-    [A-Z]* : Numeric (e.g. "Age").     [a-z]* : Symbolic (e.g. "job").   
-    *+     : Maximize (e.g. "Pay+").   *-     : Minimize (e.g. "Cost-").   
-    *X     : Ignored (e.g. "idX").     ?      : Missing value (not in header)   
-   
-For help on command line options:
-    ./tree.py -h
-
-To install and test, download http://githib.com/timm/lua/tree.py. Then:   
-
-    chmod +x tree.py   
-    mkdir -p $HOME/gits   # download sample data    
-    git clone http://github.com/timm/moot $HOME/gits/moot   
-    ./tree.py --tree ~/gits/moot/optimize/misc/auto93.csv   
-   
+  
 Options:   
-
-    -h                    help   
+    -h                    show help on command line options  
     --learn.leaf=3        set examples per leaves in a tree   
     --learn.Budget=50     set number of rows to evaluate   
     --learn.Check=5       set number of guesses to check   
@@ -32,30 +15,41 @@ Options:
     --show.Decimals=2     set number of decimals for float formatting   
     --seed=1              set random number seed   
     --p=2                 set distance parameter (1=Manhattan, 2=Euclidean)   
-
-Tests:
-
     --the                 print the configuration object
     --csv   <str>         read csv and print every 30th row
     --data  <str>         load data and print y-column stats
     --tree  <str>         build and print a decision tree
     --ranks               run best ranks statistical demo
     --test  <str>         run optimization test, make predictions, print score
+
+Input is CSV. Header (row 1) defines column roles as follows:   
+    [A-Z]* : Numeric (e.g. "Age").     [a-z]* : Symbolic (e.g. "job").   
+    *+     : Maximize (e.g. "Pay+").   *-     : Minimize (e.g. "Cost-").   
+    *X     : Ignored (e.g. "idX").     ?      : Missing value (not in header)   
+
+To install and test, download http://githib.com/timm/lua/tree.py. Then:   
+    chmod +x tree.py   
+    mkdir -p $HOME/gits   # download sample data    
+    git clone http://github.com/timm/moot $HOME/gits/moot   
+    ./tree.py --tree ~/gits/moot/optimize/misc/auto93.csv   
 """
 from time import perf_counter_ns as now
-import math, re, random, sys, bisect
+import re, random, sys, bisect
+from math import log,log2,exp
 from typing import Any, Iterable
 from types import SimpleNamespace as S
 
 # --- Types ----
 type Qty  = int | float
 type Atom = str | bool | Qty
-type Row  = list[Atom]
+type X    = list[Atom]
+type Y    = list[Qty]
+type Row  = (X,Y)
 type Rows = list[Row]
 type Col  = Num | Sym
 type Cols = list[Col]
-type Data = tuple[Rows, Cols]
-type Tree = Data | tuple[Data, Tree, Tree]
+type Data = (Rows, Cols)
+type Tree = Data | (Data, Tree, Tree)
 
 # --- Create ----
 class Tree:
@@ -87,7 +81,7 @@ class Cols:
 def clone(d: Data, rs: list=None) -> Data:
   return adds(rs or [], Data([d.cols.names]))
 
-# --- Update ----
+# --- Update ----
 def adds(src: Iterable, it=None) -> Data | Col:
   it = it or Num(); [add(it, v) for v in (src or [])]; return it
 
@@ -111,7 +105,7 @@ def add(x, v:Any, w:int=1) -> Any:
     else: x.has[v] = w + x.has.get(v, 0)
   return v
 
-# --- Query ----
+# --- Query ----
 def mid(x:Col) -> Atom | Row:
   if type(x)==Num: return x.mu
   if type(x)==Sym: return max(x.has, key=x.has.get)
@@ -120,11 +114,12 @@ def mid(x:Col) -> Atom | Row:
 
 def spread(x:Col) -> Qty:
   if type(x) == Sym:
-    return -sum(v/x.n*math.log2(v/x.n) for v in x.has.values())
+    return -sum(v/x.n*log2(v/x.n) for v in x.has.values())
   return (max(0,x.m2)/(x.n - 1))**.5 if x.n > 1 else 0
 
 def norm(n: Num, v:Qty) -> float:
-  return v if v=="?" else 1/(1+math.exp(-1.7*(v - n.mu)/(spread(n)+1e-32)))
+  sd = spread(n) + 1e-32
+  return v if v=="?" else 1/(1 + exp(-1.7 * (v - n.mu)/sd))
 
 def mink(items):
   d,n = 0, 1e-32
@@ -190,7 +185,7 @@ def leaf(t: Tree, r: Row) -> Tree:
   go = (v != "?" and (v<=t.cut if type(t.col)==Num else v==t.cut))
   return leaf(t.L if go else t.R, r)
 
-# --- Stats ---
+# --- Stats ---
 def same(xs: list, ys: list, eps: float) -> bool:
   xs, ys = sorted(xs), sorted(ys)
   n, m = len(xs), len(ys)
@@ -216,33 +211,35 @@ def bestRanks(d: dict) -> dict:
     else: break
   return best
 
-# --- Misc ---
+# --- Misc ---
 def thing(s: str) -> Atom:
-  for f in [int,float,lambda s:{"true":True,"false":False}.get(s.lower(),s)]:
+  for f in [int,float,lambda s:{"true":1,"false":0}.get(s.lower(),s)]:
     try: return f(s)
     except ValueError: pass
 
 def o(x):
-  if type(x)==float: return f"{x:.{the.show.Decimals}f}"
-  if type(x)==dict:  return "{"+", ".join(f"{k}={o(x[k])}" for k in x)+"}"
-  if type(x)==list:  return "{"+", ".join(map(o, x))+"}"
-  if type(x)==S:     return "S"+o(x.__dict__)
-  if hasattr(x, "__dict__"): return x.__class__.__name__ + o(x.__dict__)
+  of=type(x)
+  if of==float: return f"{x:.{the.show.Decimals}f}"
+  if of==dict: return "{"+", ".join(f"{k}={o(x[k])}" for k in x)+"}"
+  if of==list: return "{"+", ".join(map(o, x))+"}"
+  if of==S:  return "S"+o(x.__dict__)
   return str(x)
 
 def csv(f, clean=lambda s: s.partition("#")[0].split(",")):
   with open(f, encoding="utf-8") as file:
     for s in file:
       r = clean(s)
-      if any(x.strip() for x in r): yield [thing(x.strip()) for x in r]
+      if any(x.strip() for x in r): 
+        yield [thing(x.strip()) for x in r]
 
 def wins(d: Data):
   ds = [disty(d, r) for r in d.rows]
   lo, med = min(ds), sorted(ds)[len(ds)//2]
-  return lambda r: int(100*(1 - ((disty(d,r) - lo) / (med - lo +1e-32))))
+  return lambda r: int(100*(1-((disty(d,r)-lo) / (med-lo+1e-32))))
 
 def set_dot(t, k, v):
-  for x in (ks := k.split("."))[:-1]: t = t.__dict__.setdefault(x, S())
+  for x in (ks := k.split("."))[:-1]:
+    t=t.__dict__.setdefault(x, S())
   setattr(t, ks[-1], v)
 
 def cli(fns, the):
@@ -253,8 +250,8 @@ def cli(fns, the):
     if fn := fns.get(f"eg_{k}"):
       fn(*[thing(args.pop(0)) for arg in fn.__annotations__])
     else:
-      set_dot(the, k, thing(args.pop(0)))  # <--- Shrunk to 1 line!
-     
+      set_dot(the, k, thing(args.pop(0)))  
+
 # --- Examples ---
 def eg_h(): print(__doc__)
 
@@ -276,10 +273,11 @@ def eg_ranks():
   d = {}
   for j in range(1, 21):
     k, lam = (2, 10) if j <= 5 else (1, 20)
-    d[f"t{j}"] = [lam*(-math.log(1-random.random()))**(1/k)
+    d[f"t{j}"] = [lam*(-log(1-random.random()))**(1/k)
                    for _ in range(50)]
   print("\nTop Tier Treatments:")
-  for k, num in bestRanks(d).items(): print(f"  {k:<5} median: {o(mid(num))}")
+  for k, num in bestRanks(d).items(): 
+    print(f"  {k:<5} median: {o(mid(num))}")
 
 def eg_test(f: str):
   d, outs = Data(csv(f)), Num("win")
@@ -296,6 +294,7 @@ def eg_test(f: str):
   print(o(int(mid(outs))))
 
 the = S()
-[set_dot(the, k, thing(v)) for k, v in re.findall(r"([\w.]+)=(\S+)", __doc__)]
+for k, v in re.findall(r"([\w.]+)=(\S+)", __doc__):
+  set_dot(the, k, thing(v)) 
 
 if __name__ == "__main__": cli(globals(), the)
