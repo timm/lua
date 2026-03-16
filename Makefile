@@ -106,7 +106,7 @@ Cols=3
 
 ~/tmp/lua_test.log:  ## run ezrtest on many files
 	@mkdir -p ~/tmp
-	@time ls -r $(HOME)/gits/moot/optimize/*/*.csv  | \
+	time ls -r $(HOME)/gits/moot/optimize/*/*.csv  | \
 	   xargs -P 24 -n 1 -I{} sh -c 'python3 -B tree.py --test "{}"' | \
 		 tee $@
 	@sort -n $@  | cut -d, -f 1 | fmt -65
@@ -136,6 +136,31 @@ define HEADER_HTML
   </div>
 
   <div style="display: flex; gap: 10px; align-items: center; flex-shrink: 0; margin-left: 20px;">
+    <img src="https://img.shields.io/badge/python-3.12+-3776ab.svg?style=flat-square&logo=python&logoColor=white" style="height:22px;" alt="Python">
+    <img src="https://img.shields.io/badge/topic-XAI-purple.svg?style=flat-square" style="height:22px;" alt="XAI">
+    <a href="https://opensource.org/licenses/MIT" target="_blank" style="display:flex; align-items:center;">
+      <img src="https://img.shields.io/badge/license-MIT-green.svg?style=flat-square" style="height:22px; border:none;" alt="MIT">
+    </a>
+  </div>
+
+</div>
+endef
+export HEADER_HTML
+
+define HEADER_HTML
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<div class="custom-header" style="background:#f8f9fa; padding:12px 30px; border-bottom:1px solid #ddd; font-family:Optima, Candara, sans-serif; display: flex; justify-content: space-between; align-items: center;">
+  
+  <div style="font-size: 1.05em; font-weight: 500; display: flex; gap: 20px;">
+    <a href="https://github.com/timm/PROJECT" target="_blank" style="text-decoration:none; color:#0366d6;"><i 
+		   class="fa-brands fa-github"></i>&nbsp;GitHub&nbsp;<i class="fa-solid fa-arrow-up-right-from-square" style="font-size:0.7em;"></i>
+    </a>
+    <a href="https://github.com/timm/PROJECT/issues" target="_blank" style="text-decoration:none; color:#0366d6;"><i 
+		  class="fa-solid fa-circle-exclamation"></i>&nbsp;Issues&nbsp;<i class="fa-solid fa-arrow-up-right-from-square" style="font-size:0.7em;"></i>
+    </a>
+  </div>
+
+  <div style="display: flex; gap: 10px; align-items: center;">
     <img src="https://img.shields.io/badge/python-3.12+-3776ab.svg?style=flat-square&logo=python&logoColor=white" style="height:22px;" alt="Python">
     <img src="https://img.shields.io/badge/topic-XAI-purple.svg?style=flat-square" style="height:22px;" alt="XAI">
     <a href="https://opensource.org/licenses/MIT" target="_blank" style="display:flex; align-items:center;">

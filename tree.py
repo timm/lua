@@ -59,10 +59,10 @@ type Tree = Data | (Data, Tree, Tree) # binary tree of Data
 
 # --- Create ----
 class Tree:
-  """A binary decision tree node."""
+  """A binary decision tree node. Supports 0, 1, or 2 children."""
   def __init__(i, d:Data, rs:Rows):
     i.d = clone(d, rs)
-    i.col,i.cut,i.L,i.R = 0,0,None,None
+    i.col,i.cut,i.L,i.R = None,0,None,None
 
 class Num:
   """Summarizes continuous numbers (keeps a running mean and variance)."""
@@ -172,32 +172,35 @@ def splits(c: Col, rs: Rows, d: Data):
         add(lhs if go else rhs, disty(d, r))
       yield cut, L, R, lhs.n*spread(lhs)+rhs.n*spread(rhs)
 
-def build(d:Data, rs:Rows):
-  """Recursively builds a decision tree by finding the best splits."""
-  def _kids(t):
-    bestW, best = 1e32, None
-    for c in t.d.cols.x:
-      for cut, L, R, w in splits(c, t.d.rows, d):
-        if min(len(L),len(R)) >= the.learn.leaf and w < bestW:
-          bestW, best = w, (c, cut, L, R)
-    if best:
-      t.col, t.cut, L, R = best
-      t.L, t.R = _node(Tree(d, L)), _node(Tree(d, R))
-
-  def _node(t):
-    t.y, t.mids = scoresy(d, t.d.rows), goals(t.d)
-    if len(t.d.rows) >= 2 * the.learn.leaf: _kids(t)
+def build(d: Data, rs: Rows):
+    """Recursively builds a decision tree by finding the best splits."""
+    t = Tree(d, rs)
+    t.y, t.mids = scoresy(d, rs), goals(t.d)
+    if len(rs) >= 2 * the.learn.leaf:
+        bestW, best = 1e32, None
+        for c in t.d.cols.x:
+            for cut, L, R, w in splits(c, rs, d):
+                if min(len(L), len(R)) >= the.learn.leaf and w < bestW:
+                    bestW, best = w, (c, cut, L, R)
+        if best:
+            t.col, t.cut, L, R = best
+            t.L, t.R = build(d, L), build(d, R)
     return t
 
-  return _node(Tree(d, rs))
+def leaf(t: Tree, r: Row) -> Tree:
+  """Drops a row down the tree to find its matching leaf node."""
+  if not t.L: return t
+  v = r[t.col.at]
+  go = (v != "?" and (v<=t.cut if type(t.col)==Num else v==t.cut))
+  return leaf(t.L if go else t.R, r)
 
 def nodes(t: Tree, l=0, col=None, op="", cut=None):
   """Yields nodes of the tree for traversal."""
   yield t, l, col, op, cut
-  if t.L:
+  if t.col:
     ops = ("<=",">") if type(t.col)==Num else ("==","!=")
-    for k, op_s in sorted(zip([t.L, t.R], ops),
-                          key=lambda x: mid(x[0].y)):
+    kids = [(k, op_s) for k, op_s in zip([t.L, t.R], ops) if k]
+    for k, op_s in sorted(kids, key=lambda x: mid(x[0].y)):
       yield from nodes(k, l+1, t.col, op_s, t.cut)
 
 def showTree(t: Tree):
@@ -207,13 +210,6 @@ def showTree(t: Tree):
     print(f"{'|   '*(l-1)+p if l>0 else '':<{the.show.Show}}"
           f",{o(mid(n.y)):>4} "
           f",({n.y.n:3}), {o(n.mids)}")
-
-def leaf(t: Tree, r: Row) -> Tree:
-  """Drops a row down the tree to find its matching leaf node."""
-  if not t.L: return t
-  v = r[t.col.at]
-  go = (v != "?" and (v<=t.cut if type(t.col)==Num else v==t.cut))
-  return leaf(t.L if go else t.R, r)
 
 # --- Stats ---
 def same(xs: list, ys: list, eps: float) -> bool:
