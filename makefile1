@@ -1,0 +1,14 @@
+# vim: ts=2 sw=2 noet
+D = ~/gits/moot/optimize/misc/auto93.csv
+
+help: ## show help
+	@grep -E '^[a-z]+:.*##' $(MAKEFILE_LIST) \
+	  | sort \
+	  | awk 'BEGIN{FS=":.*##"} {printf "  %-12s %s\n",$$1,$$2}'
+	@echo ""
+	@gawk 'BEGIN{FS="^def eg_"} NF==2{sub(/\(.*/,"",$$2); \
+	  getline; gsub(/.*"""|""".*/,""); \
+	  printf "  make %-12s %s\n",$$2,$$0}' ez.py
+
+%: ez.py ## run any eg_ command
+	python3 -B ez.py --$@ $D
