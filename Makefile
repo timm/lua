@@ -217,6 +217,8 @@ div.docs pre {
 endef
 export CUSTOM_CSS
 
+docs: ~/tmp/tree.html ~/tmp/tree.pdf
+
 $(Html)/%.html: %.py
 	@mkdir -p $(Html)
 	@awk "$$AWK_SCRIPT" $< > $(Html)/$<
