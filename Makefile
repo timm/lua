@@ -214,6 +214,10 @@ div.docs pre {
   border: 1px solid #eee;
   border-left: 4px solid #7D9029;
 }
+div.section.intro div.docs,
+div.section.intro div.docs p {
+  text-align: left !important;
+}
 endef
 export CUSTOM_CSS
 
@@ -225,5 +229,6 @@ $(Html)/%.html: %.py
 	@cd $(Html) && pycco -d . $<
 	@echo "$$CUSTOM_CSS" >> $(Html)/pycco.css
 	@awk '/<body/{print; print ENVIRON["HEADER_HTML"]; next} 1' $@ > $@.tmp && mv $@.tmp $@
+	@awk 'BEGIN{s=0} /<h2>/{s=1} /class=.section/{if(!s) sub(/class=\047section\047/, "class=\047section intro\047")} 1' $@ > $@.tmp && mv $@.tmp $@
 	@rm $(Html)/$<
 

@@ -3,7 +3,11 @@
 tree.py: explainable multi-objective optimization   
 (c) 2026 Tim Menzies, timm@ieee.org, MIT license   
   
-### Options:   
+Usage: 
+
+    ./tree.py [OPTIONS] [ARGS]   
+
+Options:
 
     -h                    show help on command line options     
     --seed=1              set random number seed      
@@ -16,25 +20,27 @@ tree.py: explainable multi-objective optimization
     --stats.eps=0.35      set margin of error multiplier      
     --show.Show=30        set display width/padding for trees      
     --show.Decimals=2     set number of decimals for float formatting      
-    --tree  <str>         build and print a decision tree   
+    --see   file          see: show tree (rung 1)   
+    --act   file          act: test vs leaf (rung 2)   
+    --imagine file        imagine: what-if (rung 3)   
+    --test  file          run full train/predict/score pipeline   
     --all   file          run all tests/examples using  csv file   
    
-### Input
 Input is CSV. Header (row 1) defines column roles as follows:   
 
     [A-Z]* : Numeric (e.g. "Age").     [a-z]* : Symbolic (e.g. "job").      
     *+     : Maximize (e.g. "Pay+").   *-     : Minimize (e.g. "Cost-").      
     *X     : Ignored (e.g. "idX").     ?      : Missing value (not in header)      
 
-### Install
+
 To install and test, download http://githib.com/timm/lua/tree.py. Then:   
    
     chmod +x tree.py      
     mkdir -p $HOME/gits   # download sample data       
     git clone http://github.com/timm/moot $HOME/gits/moot      
-    ./tree.py --tree ~/gits/moot/optimize/misc/auto93.csv      
+    ./tree.py --see ~/gits/moot/optimize/misc/auto93.csv      
 
-### Run all tests:
+Run all tests:
 
     ./tree.py --all ~/gits/moot/optimize/misc/auto93.csv   
 
@@ -44,18 +50,17 @@ import re, random, sys, bisect
 from math import log,log2,exp
 from typing import Any, Iterable
 from types import SimpleNamespace as S
-
-# --- Types ----
+    
 type Qty  = int | float
 type Atom = str | bool | Qty
-type X    = list[Atom]                # independent inputs
-type Y    = [Qty]                     # dependent output goals
-type Row  = (X,Y)                     # one example of inputs --> goals
-type Rows = list[Row]                 # many 'Row's
-type Col  = Num | Sym                 # A Col summarizes numbers,symbols
-type Cols = list[Col]                 # many 'Col's
-type Data = (Rows, Cols)              # Rows, summarized in Cols
-type Tree = Data | (Data, Tree, Tree) # binary tree of Data
+type X    = list[Atom]              # independent inputs
+type Y    = list[Qty]               # dependent output goals
+type Row  = (X,Y)                   # example of inputs --> goals
+type Rows = list[Row]               # many 'Row's
+type Col  = Num | Sym               # 'Col's summarizes Nums,Syms
+type Cols = list[Col]               # many 'Col's
+type Data = (Rows, Cols)            # Rows, summarized in Cols
+type Tree = Data | (Data,Tree,Tree) # binary tree of Data
 
 # --- Create ----
 class Tree:
@@ -173,20 +178,20 @@ def splits(c: Col, rs: Rows, d: Data):
       yield cut, L, R, lhs.n*spread(lhs)+rhs.n*spread(rhs)
 
 def build(d: Data, rs: Rows):
-    """Recursively builds a decision tree by finding the best splits."""
-    t = Tree(d, rs)
-    t.y, t.mids = scoresy(d, rs), goals(t.d)
-    if len(rs) >= 2 * the.learn.leaf:
-        bestW, best = 1e32, None
-        for c in t.d.cols.x:
-            for cut, L, R, w in splits(c, rs, d):
-                if min(len(L), len(R)) >= the.learn.leaf and w < bestW:
-                    bestW, best = w, (c, cut, L, R)
-        if best:
-            t.col, t.cut, L, R = best
-            t.L, t.R = build(d, L), build(d, R)
-    return t
-
+  """Recursively builds a decision tree by finding the best splits."""
+  t = Tree(d, rs)
+  t.y, t.mids = scoresy(d, rs), goals(t.d)
+  if len(rs) >= 2 * the.learn.leaf:
+    bestW, best = 1e32, None
+    for c in t.d.cols.x:
+      for cut, L, R, w in splits(c, rs, d):
+        if min(len(L), len(R)) >= the.learn.leaf and w < bestW:
+          bestW, best = w, (c, cut, L, R)
+    if best:
+      t.col, t.cut, L, R = best
+      t.L, t.R = build(d, L), build(d, R)
+  return t
+ 
 def leaf(t: Tree, r: Row) -> Tree:
   """Drops a row down the tree to find its matching leaf node."""
   if not t.L: return t
@@ -286,6 +291,26 @@ def cli(fns, the):
     else:
       set_dot(the, k, thing(args.pop(0)))  
 
+def setup(s:str):
+  out = S()
+  for k, v in re.findall(r"([\w.]+)=(\S+)", s): set_dot(out, k, thing(v)) 
+  return out
+
+# --- Core: shared by see/act/imagine ---
+def ready(f):
+  """Shuffle, split train/test, build tree. Accepts filename or Data."""
+  d = f if type(f)==Data else Data(csv(f))
+  random.shuffle(d.rows)
+  n = len(d.rows) // 2
+  train = d.rows[:n][:the.learn.Budget]
+  d2 = clone(d, train)
+  return d, d2, build(d2, d2.rows), d.rows[n:]
+
+def whatif(t, r, c):
+  """Counterfactual: clone row, force one feature to mid, re-route."""
+  r2 = r[:]; r2[c.at] = mid(c)
+  return leaf(t, r2)
+
 # --- Examples ---
 def eg_h(): 
   """Show help."""
@@ -324,14 +349,6 @@ def eg_dist(f: str):
   d = Data(csv(f))
   assert 0 <= disty(d, d.rows[0]) <= 1
 
-def eg_tree(f: str):
-  """Build and print a decision tree."""
-  d = Data(csv(f)); random.shuffle(d.rows)
-  rows = d.rows[:the.learn.Budget]
-  t = build(clone(d, rows), rows)
-  assert hasattr(t, "d") and len(t.d.rows) > 0
-  showTree(t)
-
 def eg_same():
   """Test statistical significance math."""
   assert same([1, 2, 3], [1, 2, 3], 0.1)
@@ -346,25 +363,83 @@ def eg_ranks():
   [print(f"  {k:<5} median: {o(mid(n))}") 
    for k,n in bestRanks(d).items()]
 
+# Analytics via Pearl's ladder of causation:
+
+# |          | See            | Act            | Imagine          |
+# |          | Rung 1:        | Rung 2:        | Rung 3:          |
+# |          | association    | intervention   | counterfactual   |
+# |----------|----------------|----------------|------------------|
+# | Find     | Trends         | Alerts         | Forecasting      |
+# |          | What changed?  | What's unusual | Where are things |
+# |          |                | right now?     | heading?         |
+# |----------|----------------|----------------|------------------|
+# | Explain  | Summarize      | Compare        | Root cause       |
+# |          | What drove     | How does this  | Are we on track  |
+# |          | outcomes?      | differ?        | for our goals?   |
+# |----------|----------------|----------------|------------------|
+# | Compare  | Model          | Benchmark      | Simulate         |
+# |          | What worked    | How good vs    | What if we       |
+# |          | before?        | best practice? | change x?        |
+# |----------|----------------|----------------|------------------|
+# | Source   | training set   | test set       | perturbed test   |
+# | tree.py  | build(d, rs)   | leaf(t, r)     | leaf(t, r')+rank |
+# | Example  | see eg_see     | see eg_act     | see eg_imagine   |
+
+# Each column is the same 3 questions asked with increasing causal 
+# ambition. See only needs data. Act needs a model applied to new
+# observations. Imagine needs that model plus a way to connect the
+# observed row to a hypothetical twin (freezing latent factors).
+
+# --- See (rung 1): inspect the tree built from training data ---
+# Covers: trends + summarize + model (sorted best to worst).
+def eg_see(f: str):
+  """See: trends + summarize + model (sorted best to worst)."""
+  _, _, t, _ = ready(f)
+  showTree(t)
+
+# --- Act (rung 2): route test rows, see actual vs predicted ---
+# Covers: alerts (! flag) + compare (actual vs leaf) + benchmark.
+def eg_act(f: str):
+  """Act: alerts + compare + benchmark (test vs leaf)."""
+  d, d2, t, test = ready(f)
+  for r in sorted(test, key=lambda r: disty(d2, r))[:10]:
+    lf = leaf(t, r)
+    gap = disty(d2, r) - mid(lf.y)
+    flag = " !" if abs(gap) > spread(lf.y) else "  "
+    print(f"{flag} actual={o(disty(d2,r)):>5}"
+          f"  leaf={o(mid(lf.y)):>5}"
+          f"  gap={o(gap):>6}  n={lf.y.n}")
+
+# --- Imagine (rung 3): perturb test, rank what-ifs ---
+# Covers: forecast + root cause+simulate (what-if on worst).
+def eg_imagine(f: str):
+  """Imagine: forecast + root cause + simulate (what-if on worst)."""
+  d, d2, t, test = ready(f)
+  r = max(test, key=lambda r: disty(d2, r))
+  now = mid(leaf(t, r).y)
+  plans = [(mid(whatif(t, r, c).y), c.txt, mid(c))
+           for c in d2.cols.x]
+  print(f"  now={o(now)}")
+  for s, name, val in sorted(plans):
+    print(f"  {o(s):>5} if {name}={o(val)}"
+          f"{'  <-- improves' if s < now else ''}")
+
+# --- Full pipeline test (20 repeats) ---
 def eg_test(f: str):
   """Run full train/predict/score pipeline."""
-  d = Data(csv(f))
-  outs, win = Num("win"), wins(d)
+  d0 = Data(csv(f))
+  outs, win = Num("win"), wins(d0)
   for _ in range(20):
-    random.shuffle(d.rows)
-    n          = len(d.rows) // 2
-    train,test = d.rows[:n][:the.learn.Budget], d.rows[n:]
-    d2         = clone(d, train)
-    t          = build(d2, d2.rows)
-    guess      = sorted(test, key=lambda r: mid(leaf(t, r).y))
+    d, d2, t, test = ready(d0)
+    guess = sorted(test, key=lambda r: mid(leaf(t, r).y))
     top = min(guess[:the.learn.Check], key=lambda r: disty(d2, r))
     add(outs, win(top))
   print(int(mid(outs)))
 
 def eg_all(f: str):
-  """Run all tests, print docstrings, let exceptions crash naturally."""
-  egs = {k: v for k, v in globals().items() if k.startswith("eg_") 
-         and k not in ["eg_all", "eg_h"]}
+  """Run all tests, let exceptions crash naturally."""
+  egs = {k: v for k, v in globals().items() 
+         if k[:3] == "eg_" and k != "eg_all"}
   for k, fn in egs.items():
     print(f"\n--- {k} ---")
     if fn.__doc__: print(fn.__doc__)
@@ -372,8 +447,5 @@ def eg_all(f: str):
     fn(f) if "f" in fn.__annotations__ else fn()
 
 # -- Start up --
-the = S()
-for k, v in re.findall(r"([\w.]+)=(\S+)", __doc__):
-  set_dot(the, k, thing(v)) 
-
+the = setup(__doc__)
 if __name__ == "__main__": cli(globals(), the)
