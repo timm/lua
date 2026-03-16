@@ -107,9 +107,9 @@ Cols=3
 ~/tmp/lua_test.log:  ## run ezrtest on many files
 	@mkdir -p ~/tmp
 	time ls -r $(HOME)/gits/moot/optimize/*/*.csv  | \
-	   xargs -P 24 -n 1 -I{} sh -c 'python3 -B tree.py --test "{}"' | \
+	   xargs -P 24 -n 1 -I{} sh -c 'python3 -B ez.py --test "{}"' | \
 		 tee $@
-	@sort -n $@  | cut -d, -f 1 | fmt -65
+	@sort -n $@  | cut -d, -f 1 | fmt -80
 
 Html := ~/tmp
 
