@@ -49,11 +49,12 @@ Run all tests:
 """
 from time import perf_counter_ns as now
 import re, random, sys, bisect
+from random import random as rand, choices, choice, sample, shuffle
 from math import log,log2,exp
 from typing import Any, Iterable
 from types import SimpleNamespace as S
 
-# --- 0. Structures ---
+# ---- 0. Structures ----
 type Qty  = int | float
 type Atom = str | bool | Qty
 type X    = list[Atom]              # independent inputs
@@ -65,7 +66,7 @@ type Cols = list[Col]               # many 'Col's
 type Data = (Rows, Cols)            # Rows, summarized in Cols
 type Tree = Data | (Data,Tree,Tree) # binary tree of Data
 
-# --- 1. Config ---
+# ---- 1. Config ----
 # Coerce command line arguments into updates to config, or calls to a library
 # of demo functions.
 
@@ -105,6 +106,7 @@ def o(x:Any):
 the = S()
 for k,v in re.findall(r"([\w.]+)=(\S+)",__doc__): _nest(the, k, thing(v)) 
 
+# ---  Config Egs ---
 def eg_the():  
   """Check config defaults."""
   print(o(the)); assert int == type(the.seed)
@@ -128,12 +130,12 @@ def eg_egs(file: str):
   """Run all tests."""
   egs = {k: v for k, v in globals().items() if k[:3]=="eg_" and k!="eg_egs"}
   for k, fn in egs.items():
-    print(f"\n--- {k} ---")
+    print(f"\n--- {k} ----")
     if fn.__doc__: print(fn.__doc__)
     random.seed(the.seed)
     fn(file) if "file" in fn.__annotations__ else fn()
 
-# --- 1. Columns ---
+# ---- 1. Columns ----
 # Columns let us increrement summaries or symbolic or numeric columns.
 
 def Col(s="",a=0):
@@ -174,17 +176,31 @@ def norm(n: Num, v:Qty) -> float:
   """Squashes a number to a 0..1 scale based on its column distribution."""
   return v if v=="?" else 1/(1 + exp(-1.7 * (v - n.mu)/(spread(n)+1e-32)))
 
+def pick(x):
+  """Roulette-wheel select for dicts/Syms, Irwin-Hall(3) selection for Nums."""
+  if Sym==type(x): return pick(x.has)
+  if Num==type(x): 
+    lo,hi = x.mu - 3*x.sd, x.mu + 3*x.sd 
+    return max(lo, min(hi, x.mu + x.sd*2*(rand()+rand()+rand() - 1.5)))
+  elif dict==type(x):
+    n = sum(x.values()) * rand()
+    for k, v in x.items():
+      if (n := n - v) <= 0: return k
+
+# ---  Column Egs ---
 def eg_num():
   """Test Welford's algorithm for mean and spread."""
   n = Num(); [summarize(n,v) for v in [10, 20, 30, 40, 50]]
+  print(o(sorted(pick(n) for _ in range(10))))
   assert n.mu == 30 and 15.8 < spread(n) < 15.9
 
 def eg_sym():
   """Test symbol counting and entropy."""
-  s = Sym(); [summarize(n,v) for v in "aaabbc"]
+  s = Sym(); [summarize(s,v) for v in "aaabbc"]
+  print(o([pick(s) for _ in range(10)]))
   assert mid(s) == "a" and 1.4 < spread(s) < 1.5
 
-# --- 2. Data ---
+# ---- 2. Data ----
 class Data:
   """Holds tabular rows and separates X (independent) from Y (dependent) cols."""
   def __init__(i,src=None):
@@ -213,7 +229,7 @@ def add(x: Data|Col, v:Any, w:int=1) -> Any:
     x._mids = None # centroid is now out of data
     [summarize(c, v[c.at], w) for c in x.cols.all] 
     (x.rows.append if w>0 else x.rows.remove)(v) # update cache of rows
-  else: summarize(x,v,w)
+  else: summarize(x,v,w) # Num or Sym
   return v
 
 def mids(d:Data): 
@@ -233,6 +249,7 @@ def csv(f, clean=lambda s: s.partition("#")[0].split(",")):
       if any(x.strip() for x in r): 
         yield  [thing(x) for x in r]
 
+# ---  Data Egs ---
 def eg_cols():
   """Show columns created from strings."""
   cols = Cols(["name","Age","Weight-"])
@@ -251,6 +268,7 @@ def eg_data(file: str):
   [print(o(c)) for c in d.cols.all]
 
 def eg_addsub(file:str):
+  """Test we can incrementally add/subtract from a Data."""
   d  = Data(csv(file))
   d2 = clone(d)
   for r in d.rows: 
@@ -265,5 +283,121 @@ def eg_addsub(file:str):
   print("all",o(m2))
   print("sub",o(m3))
 
-# --- Main ---
+# ---- 3. Distance ----
+def minkowski(items:Iterable[Qty]) -> float : # 0..1
+  """Calculates Minkowski distance for a list of items."""
+  d,n = 0, 1e-32
+  for item in items: d,n = d+item**the.p, n+1
+  return (d/n) ** (1/the.p)
+
+def disty(d: Data, r: Row) -> float:
+  """Measures how far a row is from the theoretical 'perfect' row."""
+  return minkowski(abs(norm(c, r[c.at]) - c.goal) for c in d.cols.y)
+
+def distx(d: Data, r1: Row, r2:float) -> float:
+  """Measures distance between two rows."""
+  return minkowski(_distx1(c,r1[c.at],r2[c.at]) for c in d.cols.x)
+
+def _distx1(c:Num|Sym, u:Any, v:Any) -> float:
+  """Retrn distance between 2 items in same column. For missing values, assume largest psssibe"""
+  if u==v=="?": return 1
+  if Sym==type(c): return u != v
+  u,v = norm(c,u), norm(c,v)
+  u = u if u != "?" else (0 if v>0.5 else 1)
+  v = v if v != "?" else (0 if u>0.5 else 1)
+  return abs(u - v)
+
+# ---  Distance Egs ---
+def eg_distx(file:str):
+  """Demo row distance to heaven."""
+  d  = Data(csv(file))
+  r1 = d.rows[0]
+  D  = lambda r2: distx(d,r1,r2)
+  print(*d.cols.names,sep="\t")
+  for r in sorted(d.rows,key=D)[::30]: print(*r,sep="\t")
+
+def eg_disty(file:str):
+  """Demo row distance to heaven."""
+  d = Data(csv(file))
+  D = lambda r: disty(d,r)
+  print(*d.cols.names,sep="\t")
+  for r in sorted(d.rows,key=D)[::30]: print(*r,sep="\t")
+
+# ---- 4. Cluster -----
+def kmeans(d: Data, rows=None, k=10, n=10, cents=None):
+  """Iterative K-Means. Returns a list of Data objects (final clusters)."""
+  rows  = rows or d.rows
+  cents = cents or choices(rows, k=k)
+  out = []
+  for _ in range(n):
+    out = [clone(d) for _ in cents]
+    for r in rows:
+      i = min(range(len(cents)), key=lambda j: distx(d, cents[j], r))
+      add(out[i], r)
+    cents = [mids(kid) for kid in out if kid.rows]
+  return out
+
+def kpp(d: Data, rows=None, k=10, few=256):
+  """K-Means++ initialization: returns a list of rows (centroids)."""
+  rows = rows or d.rows
+  out  = [choice(rows)] 
+  while len(out) < k:
+    t = sample(rows, min(few, len(rows)))
+    weights = {i: min(distx(d, t[i], c)**2 for c in out) 
+               for i in range(len(t)) }
+    out.append(t[pick(weights)])
+  return out
+
+def half(d: Data, rows, few=20):
+  """Splits rows in half by projecting them between 2 faraway points."""
+  D = lambda r1,r2: distx(d,r1,r2)
+  t = sample(rows, min(few, len(rows)))
+  c, east, west = max(((D(i, j), i, j) for i in t for j in t),
+                      key=lambda x: x[0])
+  project = lambda r: (D(r,east)**2 + c**2 - D(r,west)**2) / (2*c + 1e-32)
+  rows = sorted(rows, key=project)
+  n = len(rows) // 2
+  return rows[:n], rows[n:], east, west, c
+
+def rhalf(d: Data, rows=None, stop=None, few=20) -> list[Data]:
+  """Recursively halves the data, returning a flat list of leaf clusters."""
+  rows = rows if rows is not None else d.rows
+  stop = stop or len(d.rows)**0.5
+  if len(rows) <= 2*stop: return [clone(d, rows)]
+  left, right, _, _, _ = half(d, rows, few)
+  return rhalf(d, left, stop, few) + rhalf(d, right, stop, few)
+
+# ---  Cluster Eg ---
+
+def eg_cluster(file: str):
+  """Compare three clustering methods."""
+  d = Data(csv(file))
+  print(f"\n{'Algorithm':<18} | {'K':>3} | {'Time':>7} | "
+        f"{'ErrX':<4} | {'ErrY':<4}")
+  print("-" * 65)
+  _cluster(d, "Baseline (None)", lambda: [d])
+  _cluster(d, "K-Means",   lambda: kmeans(d, k=10))
+  _cluster(d, "K-Means++", lambda: kmeans(d, k=10, cents=kpp(d, k=10)))
+  _cluster(d, "Rhalf",    lambda: rhalf(d))
+
+def _cluster(d, title, clusterer, repeats=20):
+  """Help for eg_compare."""
+  tm = errx = erry = k_count = 0
+  for _ in range(repeats):
+    shuffle(d.rows)
+    t1 = now()
+    out = clusterer()
+    tm += (now() - t1) / 1e6 
+    k_count += len(out)
+    errx += sum(distx(d, r, mids(k)) for k in out for r in k.rows)
+    erry += sum(abs(disty(d, r) - disty(d, mids(k))) 
+                for k in out for r in k.rows)
+  N = repeats * len(d.rows) # Denominator for averaging errors across all rows
+  print(f"{title:<18} | {k_count/repeats:>3.0f} | {int(tm/repeats):5}ms | "
+        f"{errx/N:.2f} | {erry/N:.2f}")
+  
+# ---- Main ----
+# Start-up.
+
 if __name__=="__main__": cli()
+
