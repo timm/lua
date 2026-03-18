@@ -191,7 +191,7 @@ def pick(x):
 def eg_num():
   """Test Welford's algorithm for mean and spread."""
   n = Num(); [summarize(n,v) for v in [10, 20, 30, 40, 50]]
-  print(o(sorted(pick(n) for _ in range(10))))
+  print(o(sorted(pick(n) for _ in range(100))))
   assert n.mu == 30 and 15.8 < spread(n) < 15.9
 
 def eg_sym():
@@ -324,11 +324,18 @@ def eg_disty(file:str):
   for r in sorted(d.rows,key=D)[::30]: print(*r,sep="\t")
 
 # ---- 4. Cluster -----
+def kpp(d: Data, rows=None, k=10, few=256):
+  rows = rows or d.rows
+  out = [choice(rows)]
+  while len(out) < k:
+    t = sample(rows, min(few, len(rows)))
+    ws = {i: min(distx(d, t[i], c)**2 for c in out) for i in range(len(t))}
+    out.append(t[pick(ws)])
+  return out
+
 def kmeans(d: Data, rows=None, k=10, n=10, cents=None):
-  """Iterative K-Means. Returns a list of Data objects (final clusters)."""
-  rows  = rows or d.rows
+  rows, out = rows or d.rows, []
   cents = cents or choices(rows, k=k)
-  out = []
   for _ in range(n):
     out = [clone(d) for _ in cents]
     for r in rows:
@@ -337,65 +344,77 @@ def kmeans(d: Data, rows=None, k=10, n=10, cents=None):
     cents = [mids(kid) for kid in out if kid.rows]
   return out
 
-def kpp(d: Data, rows=None, k=10, few=256):
-  """K-Means++ initialization: returns a list of rows (centroids)."""
-  rows = rows or d.rows
-  out  = [choice(rows)] 
-  while len(out) < k:
-    t = sample(rows, min(few, len(rows)))
-    weights = {i: min(distx(d, t[i], c)**2 for c in out) 
-               for i in range(len(t)) }
-    out.append(t[pick(weights)])
-  return out
-
+# ---- 4. Cluster (Tree-Based) -----
 def half(d: Data, rows, few=20):
-  """Splits rows in half by projecting them between 2 faraway points."""
-  D = lambda r1,r2: distx(d,r1,r2)
   t = sample(rows, min(few, len(rows)))
-  c, east, west = max(((D(i, j), i, j) for i in t for j in t),
-                      key=lambda x: x[0])
-  project = lambda r: (D(r,east)**2 + c**2 - D(r,west)**2) / (2*c + 1e-32)
-  rows = sorted(rows, key=project)
+  c, east, west = max(((distx(d, i, j), i, j) for i in t for j in t),
+                      key=lambda z: z[0])
+  def proj(r):
+    a, b = distx(d, r, east), distx(d, r, west)
+    return (a**2 + c**2 - b**2) / (2*c + 1e-32)
+  rows = sorted(rows, key=proj)
   n = len(rows) // 2
-  return rows[:n], rows[n:], east, west, c
-
-def rhalf(d: Data, rows=None, stop=None, few=20) -> list[Data]:
-  """Recursively halves the data, returning a flat list of leaf clusters."""
+  return rows[:n], rows[n:], east, west, c, proj(rows[n])
+ 
+def rhalf(d: Data, rows=None, stop=None, few=20) -> dict:
   rows = rows if rows is not None else d.rows
   stop = stop or len(d.rows)**0.5
-  if len(rows) <= 2*stop: return [clone(d, rows)]
-  left, right, _, _, _ = half(d, rows, few)
-  return rhalf(d, left, stop, few) + rhalf(d, right, stop, few)
+  if len(rows) <= 2 * stop: return {"leaf": clone(d, rows)}
+  l, r, east, west, c, cut = half(d, rows, few)
+  return {"east": east, "west": west, "c": c, "cut": cut,
+          "left":  rhalf(d, l, stop, few),
+          "right": rhalf(d, r, stop, few)}
 
-# ---  Cluster Eg ---
+def rhalf_leaf(d: Data, node: dict, row) -> dict:
+  if "leaf" in node: return node
+  a, b = distx(d, row, node["east"]), distx(d, row, node["west"])
+  c, cut = node["c"], node["cut"]
+  x = (a**2 + c**2 - b**2) / (2*c + 1e-32)
+  return rhalf_leaf(d, node["left" if x < cut else "right"], row)
 
+# ---  Cluster Eg (Evaluation) ---
+# ---  Cluster Eg (Evaluation) ---
 def eg_cluster(file: str):
-  """Compare three clustering methods."""
   d = Data(csv(file))
-  print(f"\n{'Algorithm':<18} | {'K':>3} | {'Time':>7} | "
-        f"{'ErrX':<4} | {'ErrY':<4}")
-  print("-" * 65)
-  _cluster(d, "Baseline (None)", lambda: [d])
-  _cluster(d, "K-Means",   lambda: kmeans(d, k=10))
-  _cluster(d, "K-Means++", lambda: kmeans(d, k=10, cents=kpp(d, k=10)))
-  _cluster(d, "Rhalf",    lambda: rhalf(d))
+  print(f"\n{'Algorithm':<10} | {'Train':>9} | {'Err Mid':>7} | "
+        f"{'Err 1NN':>7} | {'Err Base':>8}\n" + "-" * 52)
+  def build_kmeans(d_train):
+    c = kmeans(d_train, k=10)
+    return c, lambda r: min(c, key=lambda x: distx(d_train, r, mids(x)))
+  def build_kpp(d_train):
+    c = kmeans(d_train, k=10, cents=kpp(d_train, k=10))
+    return c, lambda r: min(c, key=lambda x: distx(d_train, r, mids(x)))
+  def build_tree(d_train):
+    t = rhalf(d_train)
+    return t, lambda r: rhalf_leaf(d_train, t, r)["leaf"]
+  _report(d, "K-Means",   build_kmeans)
+  _report(d, "K-Means++", build_kpp)
+  _report(d, "Tree",      build_tree)
 
-def _cluster(d, title, clusterer, repeats=20):
-  """Help for eg_compare."""
-  tm = errx = erry = k_count = 0
-  for _ in range(repeats):
-    shuffle(d.rows)
-    t1 = now()
-    out = clusterer()
-    tm += (now() - t1) / 1e6 
-    k_count += len(out)
-    errx += sum(distx(d, r, mids(k)) for k in out for r in k.rows)
-    erry += sum(abs(disty(d, r) - disty(d, mids(k))) 
-                for k in out for r in k.rows)
-  N = repeats * len(d.rows) # Denominator for averaging errors across all rows
-  print(f"{title:<18} | {k_count/repeats:>3.0f} | {int(tm/repeats):5}ms | "
-        f"{errx/N:.2f} | {erry/N:.2f}")
-  
+#have to wrok tithir this
+def _report(d: Data, name: str, builder):
+  t0 = now()
+  c, get_local_data = builder(d) 
+  train_time = (now() - t0) / 1e6
+  err_mid, err_1nn, err_base = 0.0, 0.0, 0.0
+  n = len(d.rows)
+  for r in d.rows:
+    actual_y = disty(d, r)
+    globals_sorted = sorted([row for row in d.rows if row != r], 
+                            key=lambda x: distx(d, r, x))
+    err_base += abs(actual_y - disty(d, globals_sorted[0]))
+    local_data = get_local_data(r)
+    local_rows = [row for row in local_data.rows if row != r]
+    if not local_rows: # Fallback if leaf is empty/only contains self
+        local_rows = globals_sorted
+    err_mid += abs(actual_y - disty(d, mids(local_data)))
+    local_1nn = min(local_rows, key=lambda x: distx(d, r, x))
+    err_1nn += abs(actual_y - disty(d, local_1nn))
+
+  print(f"{name:<10} | {train_time:>7.2f}ms | {err_mid/n:>7.4f} | "
+        f"{err_1nn/n:>7.4f} | {err_base/n:>8.4f}")
+
+   
 # ---- Main ----
 # Start-up.
 
