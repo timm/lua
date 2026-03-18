@@ -221,7 +221,7 @@ div.section.intro div.docs p {
 endef
 export CUSTOM_CSS
 
-docs: ~/tmp/ez.html ~/tmp/ez.pdf
+docs: ~/tmp/ezr.html ~/tmp/ezr.pdf
 
 $(Html)/%.html: %.py
 	@mkdir -p $(Html)

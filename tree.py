@@ -180,7 +180,8 @@ def splits(c: Col, rs: Rows, d: Data):
 def build(d: Data, rs: Rows):
   """Recursively builds a decision tree by finding the best splits."""
   t = Tree(d, rs)
-  t.y, t.mids = scoresy(d, rs), goals(t.d)
+  t.y, t.mids = scoresy(d, rs), goals(t.d) # n {c.txt: mid(c) for c in d.cols.y}
+
   if len(rs) >= 2 * the.learn.leaf:
     bestW, best = 1e32, None
     for c in t.d.cols.x:
@@ -274,13 +275,7 @@ def wins(d: Data):
   lo, med = min(ds), sorted(ds)[len(ds)//2]
   return lambda r: int(100*(1-((disty(d,r)-lo) / (med-lo+1e-32))))
 
-def set_dot(t, k, v):
-  """Sets a value in a nested namespace using dot notation (e.g., 'a.b.c')."""
-  for x in (ks := k.split("."))[:-1]:
-    t=t.__dict__.setdefault(x, S())
-  setattr(t, ks[-1], v)
-
-def cli(fns, the):
+def cli(fns, the): --
   """Executes functions or updates the configuration object via CLI arguments."""
   args = sys.argv[1:]
   while args:
@@ -289,12 +284,17 @@ def cli(fns, the):
     if fn := fns.get(f"eg_{k}"):
       fn(*[thing(args.pop(0)) for arg in fn.__annotations__])
     else:
-      set_dot(the, k, thing(args.pop(0)))  
+      nested_et_dot(the, k, thing(args.pop(0)))  
 
-def setup(s:str):
+def setup(s:str): --
   out = S()
-  for k, v in re.findall(r"([\w.]+)=(\S+)", s): set_dot(out, k, thing(v)) 
+  for k, v in re.findall(r"([\w.]+)=(\S+)", s): nested_set_dot(out, k, thing(v)) 
   return out
+
+def nested_set_dot(t, k, v): --
+  """Sets a value in a nested namespace using dot notation (e.g., 'a.b.c')."""
+  for x in (ks := k.split("."))[:-1]: t=t.__dict__.setdefault(x, S())
+  setattr(t, ks[-1], v)
 
 # --- Core: shared by see/act/imagine ---
 def ready(f):
