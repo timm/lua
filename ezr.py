@@ -65,6 +65,7 @@ type Col  = Num | Sym               # 'Col's summarizes Nums,Syms
 type Cols = list[Col]               # many 'Col's
 type Data = (Rows, Cols)            # Rows, summarized in Cols
 type Tree = Data | (Data,Tree,Tree) # binary tree of Data
+type Clusters = list[Data] 
 
 # ---- 1. Config ----
 # Coerce command line arguments into updates to config, 
@@ -323,20 +324,11 @@ def eg_disty(file:str):
   d = Data(csv(file))
   D = lambda r: disty(d,r)
   print(*d.cols.names,sep="\t")
-  for r in sorted(d.rows,key=D)[::30]: print(*r,sep="\t")
+  for r in sorted(d.rows,key=D)[::30]: 
+      print(*r,":",round(disty(d,r),2), sep="\t")
 
 # ---- 4. Cluster -----
-def kpp(d: Data, rows=None, k=10, few=256):
-  """Select centrois that are probably distant to each other."""
-  rows = rows or d.rows
-  out = [choice(rows)]
-  while len(out) < k:
-    t = sample(rows, min(few, len(rows)))
-    ws = {i: min(distx(d,t[i],c)**2 for c in out) for i in range(len(t))}
-    out.append(t[pick(ws)])
-  return out
-
-def kmeans(d: Data, rows=None, k=10, n=10, cents=None):
+def kmeans(d: Data, rows=None, k=10, n=10, cents=None) -> Clusters:
   """Mark rows by nearest centroids. Move centroids to mid of their rows. Repeat."""
   rows, out = rows or d.rows, []
   cents = cents or choices(rows, k=k)
@@ -348,81 +340,78 @@ def kmeans(d: Data, rows=None, k=10, n=10, cents=None):
     cents = [mids(kid) for kid in out if kid.rows]
   return out
 
-def half(d: Data, rows, few=20):
+def kpp(d: Data, rows=None, k=10, few=256) -> Rows:
+  """Select centrois that are probably distant to each other."""
+  rows = rows or d.rows
+  out = [choice(rows)]
+  while len(out) < k:
+    t = sample(rows, min(few, len(rows)))
+    ws = {i: min(distx(d,t[i],c)**2 for c in out) for i in range(len(t))}
+    out.append(t[pick(ws)])
+  return out
+
+def half(d: Data, rows, few=20) -> tuple:
   """Divide data using 2 distant points."""
-  D = lambda r1,t2: distx(d,r1,r2)
+  D = lambda r1,r2: distx(d,r1,r2)
   t = sample(rows, min(few, len(rows)))
-  c, east, west = max(((D(r1,r2), i, j) for i in t for j in t),
+  c, east, west = max(((D(r1,r2), r1, r2) for r1 in t for r2 in t),
                       key=lambda z: z[0])
   proj = lambda r: (D(r,east)**2 + c**2 - D(r,west)**2) / (2*c+1e-32)
   rows = sorted(rows, key=proj)
   n = len(rows) // 2
   return rows[:n], rows[n:], east, west, c, proj(rows[n])
  
-def rhalf(d: Data, rows=None, stop=None, few=20) -> dict:
+def rhalf(d: Data, rows=None, k=10, stop=None, few=20) -> Clusters:
   """Recursively, diide data in half."""
   rows = rows if rows is not None else d.rows
-  stop = stop or len(d.rows)**0.5
+  stop = stop or len(d.rows) / k
   if len(rows) <= 2 * stop: return [clone(d, rows)]
   l, r, east, west, c, cut = half(d, rows, few)
-  return  rhalf(d, l, stop, few) + rhalf(d, r, stop, few)}
+  return  rhalf(d, l, k, stop, few) + rhalf(d, r, k, stop, few)
 
-def near(d:Data, r1:Row, clusters:list[Data]) -> float:
+def neighbors(d:Data, r1:Row, clusters:Clusters,near=1) -> Rows:
   """Return kth rows near r1 within some clusters."""
-  c = min(c for c in cluster, key=lambda c:distx(d,r1,mids(c)))
-  return sorted(c.rows, key=lambda r2:distx(d,r1,r2))[:k]
+  c = min(clusters, key=lambda c:distx(d,r1,mids(c)))
+  return sorted(c.rows, key=lambda r2:distx(d,r1,r2))[:near]
 
 # ---  Cluster Eg (Evaluation) ---
-def eg_cluster(file: str):
-  """Compare clustering methods."""
-  train = Data(csv(file))
-  print(f"\n{'Algorithm':<10} | {'Train':>9} | {'Err Mid':>7} | "
-        f"{'Err 1NN':>7} | {'Err Base':>8}\n" + "-" * 52)
-  def stats(test,cluster):
-    shuffle(train.rows)
-    k = near(train, r) for r in cjoices(test,100)
+def say(*args, **kwargs): print(*args, file=sys.stderr, **kwargs, flush=True,end="")
 
-    for r in choices(test,100):
-      err += disty(train,r) - knn(
-
-  _kmeans(test):
-    c = knn(testkmeans(train, k=10)
-    return c, lambda r: min(c, key=lambda x: distx(d_train,r,mids(x)))
-  def build_kpp(d_train):
-    c = kmeans(d_train, k=10, cents=kpp(d_train, k=10))
-    return c, lambda r: min(c, key=lambda x: distx(d_train,r,mids(x)))
-  def build_tree(d_train):
-    t = rhalf(d_train)
-    return t, lambda r: rhalf_leaf(d_train, t, r)["leaf"]
-  _report(d, "K-Means",   build_kmeans)
-  _report(d, "K-Means++", build_kpp)
-  _report(d, "Tree",      build_tree)
+def _cluster(d,build,near=1, few=100, repeats=20):
+  """Report on one clustering method."""
+  length, t_build, t_apply, err = len(d.rows)//2, 0, 0, 0
+  for _ in range(repeats):
+    shuffle(d.rows)
+    test,train = d.rows[length:][:few], clone(d,d.rows[:length])
+    def predict(rs):
+      return sum(disty(train,r) for r in rs) / len(rs) if rs else 0
+    t_1=now()
+    clusters = build(train)
+    t_2=now()
+    t_build += t_2 - t_1
+    for r in test: 
+      err += abs(disty(d,r) - predict(neighbors(train,r,clusters,near=near)))/len(test)
+    t_apply += now()-t_2
+  return [f"{x/repeats:>7.2f}" for x in [t_build/1e6, t_apply/1e6, err]] 
 
 #have to wrok tithir this
-def _report(d: Data, name: str, builder):
-  """Helper for eg_cluster"""
-  t0 = now()
-  c, get_local_data = builder(d) 
-  train_time = (now() - t0) / 1e6
-  err_mid, err_1nn, err_base = 0.0, 0.0, 0.0
-  n = len(d.rows)
-  for r in d.rows:
-    actual_y = disty(d, r)
-    globals_sorted = sorted([row for row in d.rows if row != r], 
-                            key=lambda x: distx(d, r, x))
-    err_base += abs(actual_y - disty(d, globals_sorted[0]))
-    local_data = get_local_data(r)
-    local_rows = [row for row in local_data.rows if row != r]
-    if not local_rows: # Fallback 
-        local_rows = globals_sorted
-    err_mid += abs(actual_y - disty(d, mids(local_data)))
-    local_1nn = min(local_rows, key=lambda x: distx(d, r, x))
-    err_1nn += abs(actual_y - disty(d, local_1nn))
-
-  print(f"{name:<10} | {train_time:>7.2f}ms | {err_mid/n:>7.4f} | "
-        f"{err_1nn/n:>7.4f} | {err_base/n:>8.4f}")
-
-   
+def eg_cluster(file: str):
+  """Helper for eg_cluster""" 
+  d = Data(csv(file))
+  k = 16 # number of clusters
+  near=1 # number of near neighboring rows
+  all = adds(disty( d,r) for r in d.rows)
+  print(f"{'Algorithm':<10} | {'T_Build':>7} | {'T_Apply':>7} | "
+        f"{'Err':>7} (small: {.35*spread(all):.2f})")
+  print("-" * 43)
+  print("baseline   | ", *_cluster(d, lambda d1: [d1],  near))
+  print("sample     | ", *_cluster(d, lambda d1: [clone(d,sample(d.rows,32))],  near))
+  print("rhalf      | ", *_cluster(d, lambda d1: rhalf(d1, k=k),near))
+  print("kmeans     | ", *_cluster(d, lambda d1: kmeans(d1, k=k),near))
+  print("kpp        | ", *_cluster(d, 
+                                   lambda d1: kmeans(d1, k=k, cents=kpp(d1, k=k)),
+                                   near))
+ 
 # ---- Main ----
 # Start-up.
 
