@@ -367,8 +367,8 @@ def rhalf(d: Data, rows=None, stop=None, few=20) -> dict:
   l, r, east, west, c, cut = half(d, rows, few)
   return  rhalf(d, l, stop, few) + rhalf(d, r, stop, few)}
 
-def near(d:Data, r1:Row, centroids:list[Data]) -> float:
-  """Return kth rows near r1 with clusters."""
+def near(d:Data, r1:Row, clusters:list[Data]) -> float:
+  """Return kth rows near r1 within some clusters."""
   c = min(c for c in cluster, key=lambda c:distx(d,r1,mids(c)))
   return sorted(c.rows, key=lambda r2:distx(d,r1,r2))[:k]
 
