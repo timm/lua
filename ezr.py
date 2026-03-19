@@ -67,8 +67,8 @@ type Data = (Rows, Cols)            # Rows, summarized in Cols
 type Tree = Data | (Data,Tree,Tree) # binary tree of Data
 
 # ---- 1. Config ----
-# Coerce command line arguments into updates to config, or calls to a library
-# of demo functions.
+# Coerce command line arguments into updates to config, 
+# or calls to a library of demo functions.
 
 def cli():
   """Executes functions or updates the configuration object via CLI arguments."""
@@ -82,8 +82,8 @@ def cli():
       _nest(the, k, thing(args.pop(0)))  
 
 def _nest(t, k, v):
-  """Sets a value in a nested namespace using dot notation (e.g., 'a.b.c')."""
-  for x in (ks := k.split("."))[:-1]: t=t.__dict__.setdefault(x, S())
+  """Sets a value in a nested namespace (e.g., 'a.b.c')."""
+  for x in (ks := k.split("."))[:-1]: t=t.__dict__.setdefault(x,S())
   setattr(t, ks[-1], v)
 
 def thing(s: str) -> Atom:
@@ -97,14 +97,14 @@ def o(x:Any):
   """Recursively formats objects for neat printing."""
   t=type(x)
   if float==t: return f"{x:.{the.show.Decimals}f}"
-  if dict==t:  return "{"+", ".join(f"{k}={o(v)}" for k,v in x.items())+"}"
-  if list==t:  return "{"+", ".join(map(o, x))+"}"
-  if S==t:     return "S"+o(x.__dict__)
+  if dict==t: return "{"+", ".join(f"{k}={o(v)}" for k,v in x.items())+"}"
+  if list==t: return "{"+", ".join(map(o, x))+"}"
+  if S==t:    return "S"+o(x.__dict__)
   if hasattr(x,"__dict__"): return x.__class__.__name__+o(x.__dict__)
   return str(x)
 
 the = S()
-for k,v in re.findall(r"([\w.]+)=(\S+)",__doc__): _nest(the, k, thing(v)) 
+for k,v in re.findall(r"([\w.]+)=(\S+)",__doc__): _nest(the,k,thing(v)) 
 
 # ---  Config Egs ---
 def eg_the():  
@@ -128,7 +128,8 @@ def eg_list():
 
 def eg_egs(file: str):
   """Run all tests."""
-  egs = {k: v for k, v in globals().items() if k[:3]=="eg_" and k!="eg_egs"}
+  funs=globals().items()
+  egs = {k: v for k, v in funs if k[:3]=="eg_" and k!="eg_egs"}
   for k, fn in egs.items():
     print(f"\n--- {k} ----")
     if fn.__doc__: print(fn.__doc__)
@@ -170,18 +171,19 @@ def mid(x:Col) -> Atom:
 
 def spread(x:Col) -> float:
   """Returns the variation (standard deviation for Num, entropy for Sym)."""
-  return x.sd if Num==type(x) else -sum(v/x.n*log2(v/x.n) for v in x.has.values())
+  return x.sd if Num==type(x) \
+              else -sum(v/x.n*log2(v/x.n) for v in x.has.values())
 
 def norm(n: Num, v:Qty) -> float:
   """Squashes a number to a 0..1 scale based on its column distribution."""
-  return v if v=="?" else 1/(1 + exp(-1.7 * (v - n.mu)/(spread(n)+1e-32)))
+  return v if v=="?" else 1/(1 + exp(-1.7*(v-n.mu)/(spread(n)+1e-32)))
 
 def pick(x):
   """Roulette-wheel select for dicts/Syms, Irwin-Hall(3) selection for Nums."""
   if Sym==type(x): return pick(x.has)
   if Num==type(x): 
     lo,hi = x.mu - 3*x.sd, x.mu + 3*x.sd 
-    return max(lo, min(hi, x.mu + x.sd*2*(rand()+rand()+rand() - 1.5)))
+    return max(lo, min(hi, x.mu+x.sd*2*(rand()+rand()+rand()-1.5)))
   elif dict==type(x):
     n = sum(x.values()) * rand()
     for k, v in x.items():
@@ -191,13 +193,13 @@ def pick(x):
 def eg_num():
   """Test Welford's algorithm for mean and spread."""
   n = Num(); [summarize(n,v) for v in [10, 20, 30, 40, 50]]
-  print(o(sorted(pick(n) for _ in range(100))))
+  print(o(sorted(int(pick(n)) for _ in range(20))))
   assert n.mu == 30 and 15.8 < spread(n) < 15.9
 
 def eg_sym():
   """Test symbol counting and entropy."""
   s = Sym(); [summarize(s,v) for v in "aaabbc"]
-  print(o([pick(s) for _ in range(10)]))
+  print(*sorted(pick(s) for _ in range(20)))
   assert mid(s) == "a" and 1.4 < spread(s) < 1.5
 
 # ---- 2. Data ----
@@ -228,7 +230,7 @@ def add(x: Data|Col, v:Any, w:int=1) -> Any:
   if Data is type(x):
     x._mids = None # centroid is now out of data
     [summarize(c, v[c.at], w) for c in x.cols.all] 
-    (x.rows.append if w>0 else x.rows.remove)(v) # update cache of rows
+    (x.rows.append if w>0 else x.rows.remove)(v) 
   else: summarize(x,v,w) # Num or Sym
   return v
 
@@ -292,13 +294,13 @@ def minkowski(items:Iterable[Qty]) -> float : # 0..1
 
 def disty(d: Data, r: Row) -> float:
   """Measures how far a row is from the theoretical 'perfect' row."""
-  return minkowski(abs(norm(c, r[c.at]) - c.goal) for c in d.cols.y)
+  return minkowski(abs(norm(c,r[c.at])-c.goal) for c in d.cols.y)
 
 def distx(d: Data, r1: Row, r2:float) -> float:
   """Measures distance between two rows."""
-  return minkowski(_distx1(c,r1[c.at],r2[c.at]) for c in d.cols.x)
+  return minkowski(aha(c,r1[c.at],r2[c.at]) for c in d.cols.x)
 
-def _distx1(c:Num|Sym, u:Any, v:Any) -> float:
+def aha(c:Num|Sym, u:Any, v:Any) -> float:
   """Retrn distance between 2 items in same column. For missing values, assume largest psssibe"""
   if u==v=="?": return 1
   if Sym==type(c): return u != v
@@ -325,65 +327,70 @@ def eg_disty(file:str):
 
 # ---- 4. Cluster -----
 def kpp(d: Data, rows=None, k=10, few=256):
+  """Select centrois that are probably distant to each other."""
   rows = rows or d.rows
   out = [choice(rows)]
   while len(out) < k:
     t = sample(rows, min(few, len(rows)))
-    ws = {i: min(distx(d, t[i], c)**2 for c in out) for i in range(len(t))}
+    ws = {i: min(distx(d,t[i],c)**2 for c in out) for i in range(len(t))}
     out.append(t[pick(ws)])
   return out
 
 def kmeans(d: Data, rows=None, k=10, n=10, cents=None):
+  """Mark rows by nearest centroids. Move centroids to mid of their rows. Repeat."""
   rows, out = rows or d.rows, []
   cents = cents or choices(rows, k=k)
   for _ in range(n):
     out = [clone(d) for _ in cents]
     for r in rows:
-      i = min(range(len(cents)), key=lambda j: distx(d, cents[j], r))
+      i = min(range(len(cents)), key=lambda j: distx(d,cents[j],r))
       add(out[i], r)
     cents = [mids(kid) for kid in out if kid.rows]
   return out
 
-# ---- 4. Cluster (Tree-Based) -----
 def half(d: Data, rows, few=20):
+  """Divide data using 2 distant points."""
+  D = lambda r1,t2: distx(d,r1,r2)
   t = sample(rows, min(few, len(rows)))
-  c, east, west = max(((distx(d, i, j), i, j) for i in t for j in t),
+  c, east, west = max(((D(r1,r2), i, j) for i in t for j in t),
                       key=lambda z: z[0])
-  def proj(r):
-    a, b = distx(d, r, east), distx(d, r, west)
-    return (a**2 + c**2 - b**2) / (2*c + 1e-32)
+  proj = lambda r: (D(r,east)**2 + c**2 - D(r,west)**2) / (2*c+1e-32)
   rows = sorted(rows, key=proj)
   n = len(rows) // 2
   return rows[:n], rows[n:], east, west, c, proj(rows[n])
  
 def rhalf(d: Data, rows=None, stop=None, few=20) -> dict:
+  """Recursively, diide data in half."""
   rows = rows if rows is not None else d.rows
   stop = stop or len(d.rows)**0.5
-  if len(rows) <= 2 * stop: return {"leaf": clone(d, rows)}
+  if len(rows) <= 2 * stop: return [clone(d, rows)]
   l, r, east, west, c, cut = half(d, rows, few)
-  return {"east": east, "west": west, "c": c, "cut": cut,
-          "left":  rhalf(d, l, stop, few),
-          "right": rhalf(d, r, stop, few)}
+  return  rhalf(d, l, stop, few) + rhalf(d, r, stop, few)}
 
-def rhalf_leaf(d: Data, node: dict, row) -> dict:
-  if "leaf" in node: return node
-  a, b = distx(d, row, node["east"]), distx(d, row, node["west"])
-  c, cut = node["c"], node["cut"]
-  x = (a**2 + c**2 - b**2) / (2*c + 1e-32)
-  return rhalf_leaf(d, node["left" if x < cut else "right"], row)
+def near(d:Data, r1:Row, centroids:list[Data]) -> float:
+  """Return kth rows near r1 with clusters."""
+  c = min(c for c in cluster, key=lambda c:distx(d,r1,mids(c)))
+  return sorted(c.rows, key=lambda r2:distx(d,r1,r2))[:k]
 
-# ---  Cluster Eg (Evaluation) ---
 # ---  Cluster Eg (Evaluation) ---
 def eg_cluster(file: str):
-  d = Data(csv(file))
+  """Compare clustering methods."""
+  train = Data(csv(file))
   print(f"\n{'Algorithm':<10} | {'Train':>9} | {'Err Mid':>7} | "
         f"{'Err 1NN':>7} | {'Err Base':>8}\n" + "-" * 52)
-  def build_kmeans(d_train):
-    c = kmeans(d_train, k=10)
-    return c, lambda r: min(c, key=lambda x: distx(d_train, r, mids(x)))
+  def stats(test,cluster):
+    shuffle(train.rows)
+    k = near(train, r) for r in cjoices(test,100)
+
+    for r in choices(test,100):
+      err += disty(train,r) - knn(
+
+  _kmeans(test):
+    c = knn(testkmeans(train, k=10)
+    return c, lambda r: min(c, key=lambda x: distx(d_train,r,mids(x)))
   def build_kpp(d_train):
     c = kmeans(d_train, k=10, cents=kpp(d_train, k=10))
-    return c, lambda r: min(c, key=lambda x: distx(d_train, r, mids(x)))
+    return c, lambda r: min(c, key=lambda x: distx(d_train,r,mids(x)))
   def build_tree(d_train):
     t = rhalf(d_train)
     return t, lambda r: rhalf_leaf(d_train, t, r)["leaf"]
@@ -393,6 +400,7 @@ def eg_cluster(file: str):
 
 #have to wrok tithir this
 def _report(d: Data, name: str, builder):
+  """Helper for eg_cluster"""
   t0 = now()
   c, get_local_data = builder(d) 
   train_time = (now() - t0) / 1e6
@@ -405,7 +413,7 @@ def _report(d: Data, name: str, builder):
     err_base += abs(actual_y - disty(d, globals_sorted[0]))
     local_data = get_local_data(r)
     local_rows = [row for row in local_data.rows if row != r]
-    if not local_rows: # Fallback if leaf is empty/only contains self
+    if not local_rows: # Fallback 
         local_rows = globals_sorted
     err_mid += abs(actual_y - disty(d, mids(local_data)))
     local_1nn = min(local_rows, key=lambda x: distx(d, r, x))

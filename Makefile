@@ -25,7 +25,7 @@ push: ## commit to main
 pull: ## commit to main
 	git pull
 
-Font=5.5
+Font=5
 Cols=3
 Html := ~/tmp
 
