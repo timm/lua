@@ -1,425 +1,556 @@
 #!/usr/bin/env python3 -B
 """
-ezr.py: explainable multi-objective optimization   
+ezr1.py: explainable multi-objective optimization   
 (c) 2026 Tim Menzies, timm@ieee.org, MIT license   
   
 Usage: 
-
-    ./ezr.py [OPTIONS] [ARGS]   
+  ./ezr1.py [OPTIONS] [ARGS]   
 
 Options:
-
-    -h                    how help on command line options     
-    --the                 show current config
-    --list                list all demos
-    --egs file            run all de,os
-    --seed=1              set random number seed      
-    --p=2                 set distance type (1 is Manhattan, 2 is Euclidean)      
-    --learn.leaf=3        set examples per leaves in a tree      
-    --learn.Budget=50     set number of rows to evaluate      
-    --learn.Check=5       set number of guesses to check      
-    --stats.cliffs=0.195  set threshold for Cliff's Delta      
-    --stats.conf=1.36     set confidence coefficient for KS test      
-    --stats.eps=0.35      set margin of error multiplier      
-    --show.Show=30        set display width/padding for trees      
-    --show.Decimals=2     set number of decimals for float formatting      
-    --see   file          see: show tree (rung 1)   
-    --act   file          act: test vs leaf (rung 2)   
-    --imagine file        imagine: what-if (rung 3)   
-    --test  file          run full train/predict/score pipeline   
+  -h                    show help on command line options     
+  --list                list all demos
+  --egs file            run all demos safely (catches exceptions)
+  --seed=1              set random number seed      
+  --p=2                 distance (1=Manhattan, 2=Euclidean)
+  --learn.leaf=3        examples per leaf in a tree      
+  --learn.Budget=50     number of rows to evaluate      
+  --learn.Check=5       number of guesses to check      
+  --stats.cliffs=0.195  threshold for Cliff's Delta      
+  --stats.conf=1.36     confidence coefficient for KS test
+  --stats.eps=0.35      margin of error multiplier      
+  --show.Show=30        display width/padding for trees      
+  --show.Decimals=2     number of decimals for floats      
+  --see   file          see: show tree (rung 1)   
+  --act   file          act: test vs leaf (rung 2)   
+  --imagine file        imagine: what-if (rung 3)   
+  --test  file          run tree train/predict/score pipeline   
+  --cluster file        run clustering benchmark table
    
-Input is CSV. Header (row 1) defines column roles as follows:   
-
-    [A-Z]* : Numeric (e.g. "Age").     [a-z]* : Symbolic (e.g. "job").      
-    *+     : Maximize (e.g. "Pay+").   *-     : Minimize (e.g. "Cost-").      
-    *X     : Ignored (e.g. "idX").     ?      : Missing value (not in header)      
-
-
-To install and test, download http://githib.com/timm/lua/ezr.py. Then:   
-   
-    chmod +x tree.py      
-    mkdir -p $HOME/gits   # download sample data       
-    git clone http://github.com/timm/moot $HOME/gits/moot      
-    ./ezr.py --see ~/gits/moot/optimize/misc/auto93.csv      
-
-Run all tests:
-
-    ./ezr.py --egs ~/gits/moot/optimize/misc/auto93.csv   
-
+Input is CSV. Header (row 1) defines column roles:   
+  [A-Z]* : Numeric (e.g. "Age").      
+  [a-z]* : Symbolic (e.g. "job").      
+  *+     : Maximize (e.g. "Pay+").     
+  *-     : Minimize (e.g. "Cost-").      
+  *X     : Ignored (e.g. "idX").        
+  ?      : Missing value (not in header)      
 """
+from __future__ import annotations
 from time import perf_counter_ns as now
 import re, random, sys, bisect
 from random import random as rand, choices, choice, sample, shuffle
-from math import log,log2,exp
-from typing import Any, Iterable
+from math import log, log2, exp
+from typing import Any, Iterable, Callable
 from types import SimpleNamespace as S
 
-# ---- 0. Structures ----
-type Qty  = int | float
-type Atom = str | bool | Qty
-type X    = list[Atom]              # independent inputs
-type Y    = list[Qty]               # dependent output goals
-type Row  = (X,Y)                   # example of inputs --> goals
-type Rows = list[Row]               # many 'Row's
-type Col  = Num | Sym               # 'Col's summarizes Nums,Syms
-type Cols = list[Col]               # many 'Col's
-type Data = (Rows, Cols)            # Rows, summarized in Cols
-type Tree = Data | (Data,Tree,Tree) # binary tree of Data
-type Clusters = list[Data] 
+# Naming conventions:
+#  i   : self
+#  j   : iterator variable
+#  c   : any column (Num or Sym)
+#  d   : Data (rows + summarized columns)
+#  ds  : Datas (list of Data objects)
+#  r   : row (a single list of values)
+#  rs  : rows (a list of lists)
+#  x   : an x-column specifically (independent)
+#  y   : a y-column specifically (dependent)
+#  t   : Tree node
+#  txt : string
 
-# ---- 1. Config ----
-# Coerce command line arguments into updates to config, 
-# or calls to a library of demo functions.
-
-def cli():
-  """Executes functions or updates the configuration object via CLI arguments."""
+type Qty   = int | float
+type Atom  = str | bool | Qty
+type Row   = list[Atom]
+type Rows  = list[Row]
+type Col   = Num | Sym
+type Cols  = list[Col]
+type Tree  = Any  # Type hinting wrapper
+type Datas = list[Data]
+
+# ---- 1. Config & CLI ----
+def cli() -> None:
+  """Execute functions or update config via CLI args."""
   args = sys.argv[1:]
   while args:
     random.seed(the.seed)
     k = re.sub(r"^-+", "", args.pop(0))
     if fn := globals().get(f"eg_{k}"): 
-      fn(*[thing(args.pop(0)) for arg in fn.__annotations__])
+      fn(*[thing(args.pop(0)) for _ in fn.__annotations__])
     else: 
       _nest(the, k, thing(args.pop(0)))  
 
-def _nest(t, k, v):
-  """Sets a value in a nested namespace (e.g., 'a.b.c')."""
-  for x in (ks := k.split("."))[:-1]: t=t.__dict__.setdefault(x,S())
+def _nest(t: Any, k: str, v: Any) -> None:
+  """Set value in nested namespace (e.g., 'a.b.c')."""
+  for x in (ks := k.split("."))[:-1]: t = t.__dict__.setdefault(x, S())
   setattr(t, ks[-1], v)
 
-def thing(s: str) -> Atom:
-  """Safely coerces strings into numbers or booleans."""
-  s = s.strip()
-  for f in [int,float,lambda s:{"true":1,"false":0}.get(s.lower(),s)]:
-    try: return f(s)
+def thing(txt: str) -> Atom:
+  """Coerce strings into numbers or booleans."""
+  txt = txt.strip()
+  b = lambda s: {"true": 1, "false": 0}.get(s.lower(), s)
+  for f in [int, float, b]:
+    try: return f(txt)
     except ValueError: pass
 
-def o(x:Any):
-  """Recursively formats objects for neat printing."""
-  t=type(x)
-  if float==t: return f"{x:.{the.show.Decimals}f}"
-  if dict==t: return "{"+", ".join(f"{k}={o(v)}" for k,v in x.items())+"}"
-  if list==t: return "{"+", ".join(map(o, x))+"}"
-  if S==t:    return "S"+o(x.__dict__)
-  if hasattr(x,"__dict__"): return x.__class__.__name__+o(x.__dict__)
+def o(x: Any) -> str:
+  """Recursively format objects for neat printing."""
+  t = type(x)
+  if float == t: return f"{x:.{the.show.Decimals}f}"
+  if dict == t:  return "{"+", ".join(f"{k}={o(v)}" for k,v in x.items())+"}"
+  if list == t:  return "{"+", ".join(map(o, x))+"}"
+  if S == t:     return "S" + o(x.__dict__)
+  if hasattr(x, "__dict__"): return x.__class__.__name__ + o(x.__dict__)
   return str(x)
 
-the = S()
-for k,v in re.findall(r"([\w.]+)=(\S+)",__doc__): _nest(the,k,thing(v)) 
-
-# ---  Config Egs ---
-def eg_the():  
-  """Check config defaults."""
-  print(o(the)); assert int == type(the.seed)
-
-def eg_thing():
-  """Test type coercion."""
-  assert thing("3.14  ") == 3.14 and thing(" true ") in [True, 1]
-
+# --- Examples, config & CLI ---
 def eg_h(): 
-  """Show help."""
+  """Print the help text."""
   print(__doc__)
 
+def eg_the(): 
+  """Test that config dictionary parses correctly."""
+  print(o(the)); assert int == type(the.seed)
+
+def eg_thing(): 
+  """Test string coercion to correct types."""
+  assert thing("3.14") == 3.14 and thing(" true ") in [True, 1]
+  print("ok")
+
 def eg_list():
-  """List all demos."""
-  for k,fn in sorted({k: v for k, v in globals().items() 
-                      if k[:3] == "eg_"}.items()):
-      s= f"--{k[3:]} {' '.join([k for k in fn.__annotations__])}"
-      print(f"    {s:15} {fn.__doc__}")
+  """List all available example functions and their signatures."""
+  fns = {k: v for k, v in globals().items() if k[:3] == "eg_"}
+  for k, fn in fns.items():
+    print(f"  --{k[3:]:12} {' '.join(fn.__annotations__)} {fn.__doc__}")
 
 def eg_egs(file: str):
-  """Run all tests."""
-  funs=globals().items()
-  egs = {k: v for k, v in funs if k[:3]=="eg_" and k!="eg_egs"}
+  """Run all test examples sequentially."""
+  egs = {k: v for k, v in globals().items() if k[:3]=="eg_" and k!="eg_egs"}
   for k, fn in egs.items():
-    print(f"\n--- {k} ----")
-    if fn.__doc__: print(fn.__doc__)
+    print(f"\n--- {k} ----\n{fn.__doc__}")
     random.seed(the.seed)
     fn(file) if "file" in fn.__annotations__ else fn()
-
-# ---- 1. Columns ----
-# Columns let us increrement summaries or symbolic or numeric columns.
-
-def Col(s="",a=0):
-  """Factory: strings to column. Upper case ==> Nums. Else, return a Sym."""
-  return (Num if s[0].isupper() else Sym)(s, a) 
+
+# ---- 2. Columns ----
+def Col(txt: str = "", a: int = 0) -> Col: 
+  """Return a Num or Sym column based on capitalization."""
+  return (Num if txt[0].isupper() else Sym)(txt, a) 
 
 class Num:
-  """Summarizes continuous numbers (keeps a running mean and variance)."""
-  def __init__(i, s="", a=0):
-    """Anything ending in '-' is a goal to be minimized."""
-    i.txt,i.at,i.n,i.mu,i.m2,i.sd,i.goal = s,a,0,0,0,0,s[-1:]!="-"
+  """Summarizes a stream of numbers."""
+  def __init__(i, txt: str = "", a: int = 0):
+    i.txt, i.at, i.n = txt, a, 0
+    i.mu, i.m2, i.sd, i.heaven = 0, 0, 0, txt[-1:] != "-"
 
 class Sym:
-  """Summarizes categorical data (keeps a frequency count)."""
-  def __init__(i, s="", a=0): i.txt,i.at,i.n,i.has = s,a,0,{}
+  """Summarizes a stream of symbols."""
+  def __init__(i, txt: str = "", a: int = 0): 
+    i.txt, i.at, i.n, i.has = txt, a, 0, {}
 
-def summarize(x: Num|Sym, v:Any, w:int=1) -> Any:
-  """To add/subtract from this column, use w=1,-1 respectively"""
-  if v=="?": return v
-  x.n += w
-  if Sym == type(x): 
-    x.has[v] = w + x.has.get(v, 0)
-  elif w < 0 and x.n <= 2:  # Nums. Case#1. resetting to zero
-    x.n = x.mu = x.m2 = x.sd = 0
-  else: # Nums. Case #2. Update using Welford.
-    d = v - x.mu; x.mu += w*d/x.n; x.m2 += w*d*(v - x.mu)
-    x.sd = (max(0,x.m2)/(x.n - 1))**.5 if x.n > 1 else 0
+def summarize(c: Col, v: Any, w: int = 1) -> Any:
+  """Update column statistics incrementally with value `v`, weight `w`."""
+  if v == "?": return v
+  c.n += w
+  if Sym == type(c): c.has[v] = w + c.has.get(v, 0)
+  elif w < 0 and c.n <= 2: c.n = c.mu = c.m2 = c.sd = 0
+  else:
+    delta = v - c.mu
+    c.mu += w * delta / c.n
+    c.m2 += w * delta * (v - c.mu)
+    c.sd = (max(0, c.m2) / (c.n - 1))**.5 if c.n > 1 else 0
 
-def mid(x:Col) -> Atom:
-  """Returns the central tendency (mean for Num, mode for Sym)."""
-  return x.mu if Num==type(x) else max(x.has, key=x.has.get)
+def mid(c: Col) -> Atom: 
+  """Return central tendency (mean for Num, mode for Sym)."""
+  return c.mu if Num==type(c) else max(c.has, key=c.has.get)
 
-def spread(x:Col) -> float:
-  """Returns the variation (standard deviation for Num, entropy for Sym)."""
-  return x.sd if Num==type(x) \
-              else -sum(v/x.n*log2(v/x.n) for v in x.has.values())
+def spread(c: Col) -> float:
+  """Return variability (standard deviation for Num, entropy for Sym)."""
+  return c.sd if Num==type(c) else -sum(v/c.n * log2(v/c.n) for v in c.has.values())
 
-def norm(n: Num, v:Qty) -> float:
-  """Squashes a number to a 0..1 scale based on its column distribution."""
-  return v if v=="?" else 1/(1 + exp(-1.7*(v-n.mu)/(spread(n)+1e-32)))
+def norm(c: Num, v: Qty) -> float:
+  """Normalize numeric values using a logistic function."""
+  if v == "?": return v
+  return 1 / (1 + exp(-1.7 * (v - c.mu) / (spread(c) + 1e-32)))
 
-def pick(x):
-  """Roulette-wheel select for dicts/Syms, Irwin-Hall(3) selection for Nums."""
-  if Sym==type(x): return pick(x.has)
-  if Num==type(x): 
-    lo,hi = x.mu - 3*x.sd, x.mu + 3*x.sd 
-    return max(lo, min(hi, x.mu+x.sd*2*(rand()+rand()+rand()-1.5)))
-  elif dict==type(x):
-    n = sum(x.values()) * rand()
-    for k, v in x.items():
-      if (n := n - v) <= 0: return k
+def pick(it: Any) -> Any:
+  """Randomly sample a value from a distribution."""
+  if Sym == type(it): return pick(it.has)
+  if Num == type(it): 
+    lo, hi = it.mu - 3*it.sd, it.mu + 3*it.sd 
+    return max(lo, min(hi, it.mu + it.sd * 2 * (rand()+rand()+rand()-1.5)))
+  n = sum(it.values()) * rand()
+  for k, v in it.items():
+    if (n := n - v) <= 0: return k
 
-# ---  Column Egs ---
+# --- Examples, columns ---
 def eg_num():
-  """Test Welford's algorithm for mean and spread."""
-  n = Num(); [summarize(n,v) for v in [10, 20, 30, 40, 50]]
-  print(o(sorted(int(pick(n)) for _ in range(20))))
-  assert n.mu == 30 and 15.8 < spread(n) < 15.9
+  """Test numeric incremental updates."""
+  c = adds([10, 20, 30, 40, 50], Num())
+  assert c.mu == 30 and 15.8 < spread(c) < 15.9
 
 def eg_sym():
-  """Test symbol counting and entropy."""
-  s = Sym(); [summarize(s,v) for v in "aaabbc"]
-  print(*sorted(pick(s) for _ in range(20)))
-  assert mid(s) == "a" and 1.4 < spread(s) < 1.5
+  """Test symbolic entropy calculations."""
+  c = adds("aaabbc", Sym())
+  assert mid(c) == "a" and 1.4 < spread(c) < 1.5
 
-# ---- 2. Data ----
+def eg_pick():
+  """Test numeric incremental updates."""
+  c1 = adds([10, 20, 30, 40, 50], Num())
+  c2 = adds(pick(c1) for _ in range(1000))
+  assert abs(mid(c1)- mid(c2)) < 0.25
+  assert abs(spread(c1) - spread(c2)) < 0.25
+  c1 = adds("aaabbc", Sym())
+  c2 = adds([pick(c1) for _ in range(1000)],Sym())
+  assert mid(c1)== mid(c2)
+  assert abs(spread(c1) - spread(c2)) < 0.1
+
+# ---- 3. Data (Tables) ----
 class Data:
-  """Holds tabular rows and separates X (independent) from Y (dependent) cols."""
-  def __init__(i,src=None):
+  """Stores rows and summarizes them in corresponding columns."""
+  def __init__(i, src: Iterable = None):
     src = iter(src or {})
-    i.rows, i.cols, i._mids = [], Cols(next(src)), None
-    adds(src,i)
+    i.rows, i.cols, i._centroid = [], Cols(next(src)), None
+    adds(src, i)
 
 class Cols:
-  """Parses column headers to assign types (Num/Sym) and roles (X/Y)."""
+  """Extracts and organizes Num and Sym columns from header strings."""
   def __init__(i, names: list[str]):
-    i.names, i.all = names, [Col(s,j) for j,s in enumerate(names)]
-    i.x = [c for c in i.all if c.txt[-1] not in "+-!X"]
-    i.y = [c for c in i.all if c.txt[-1]     in "+-!"]
+    i.names, i.all = names, [Col(txt, j) for j, txt in enumerate(names)]
+    i.xs = [c for c in i.all if c.txt[-1] not in "+-!X"]
+    i.ys = [c for c in i.all if c.txt[-1] in "+-!"]
 
-def clone(d: Data, rs: list=None) -> Data:
-  """Creates an empty Data object with the same columns as the original."""
+def clone(d: Data, rs: list = None) -> Data: 
+  """Create an empty Data object with the same columns, adding optional rows."""
   return adds(rs or [], Data([d.cols.names]))
 
-def sub(x, v:Any): 
-  """Removes an item from a summary (decrements counts)."""
-  return add(x,v,-1)
+def sub(it: Any, v: Any) -> Any: 
+  """Remove a value or row by adding it with weight -1."""
+  return add(it, v, -1)
 
-def add(x: Data|Col, v:Any, w:int=1) -> Any:
-  """Create or update summaries. Adds new rows to Data."""
-  if Data is type(x):
-    x._mids = None # centroid is now out of data
-    [summarize(c, v[c.at], w) for c in x.cols.all] 
-    (x.rows.append if w>0 else x.rows.remove)(v) 
-  else: summarize(x,v,w) # Num or Sym
+def add(it: Data|Col, v: Any, w: int = 1) -> Any:
+  """Add a value or row, updating nested summaries automatically."""
+  if Data is type(it):
+    it._centroid = None
+    [summarize(c, v[c.at], w) for c in it.cols.all] 
+    (it.rows.append if w > 0 else it.rows.remove)(v) 
+  else: summarize(it, v, w)
   return v
 
-def mids(d:Data): 
-  """Memoize centroid creation. Return current centroid."""
-  d._mids = d._mids or [mid(c) for c in d.cols.all]
-  return d._mids
+def mids(d: Data) -> list[Atom]: 
+  """Return the centroid (midpoints) of all columns in the data."""
+  d._centroid = d._centroid or [mid(c) for c in d.cols.all]
+  return d._centroid
 
-def adds(src: Iterable, it=None) -> Data | Col:
-  """Sequentially adds many items to a Data object or Column."""
+def adds(src: Iterable, it: Any = None) -> Data | Col:
+  """Add multiple items from an iterable into the target object."""
   it = it or Num(); [add(it, v) for v in (src or [])]; return it
 
-def csv(f, clean=lambda s: s.partition("#")[0].split(",")):
-  """Yields rows from a CSV file, skipping comments and empty whitespace."""
+def csv(f: str, clean: Callable = lambda s: s.partition("#")[0].split(",")) -> Iterable:
+  """Yield formatted and typed rows from a CSV file."""
   with open(f, encoding="utf-8") as file:
     for s in file:
       r = clean(s)
-      if any(x.strip() for x in r): 
-        yield  [thing(x) for x in r]
+      if any(x.strip() for x in r): yield [thing(x) for x in r]
 
-# ---  Data Egs ---
-def eg_cols():
-  """Show columns created from strings."""
+def wins(d: Data) -> Callable:
+  """Return a function that scores rows based on distance to heaven."""
+  ds = [disty(d, r) for r in d.rows]
+  lo, med = min(ds), sorted(ds)[len(ds)//2]
+  return lambda r: int(100 * (1 - ((disty(d, r) - lo) / (med - lo + 1e-32))))
+
+def ready(file: Any) -> tuple[Data, Data, Rows]:
+  """Load, safely shuffle, and split data into train/test sets."""
+  d = file if Data == type(file) else Data(csv(file))
+  rs = sample(d.rows, len(d.rows)) 
+  n = len(rs) // 2
+  return d, clone(d, rs[:n][:the.learn.Budget]), rs[n:]
+
+# --- Examples, data (tables) ---
+def eg_cols(): 
+  """Test column extraction logic."""
   cols = Cols(["name","Age","Weight-"])
-  [print(o(c)) for c in cols.x]
+  [print("x",o(c)) for c in cols.xs]
+  [print("y",o(c)) for c in cols.ys]
+  assert not cols.ys[0].heaven
 
-def eg_csv(file: str):
-  """Test reading CSV rows."""
-  rows = list(csv(file))
-  assert len(rows) > 0; print(f"First row: {rows[0]}")
+def eg_csv(file: str): 
+  """Test that CSV reader extracts data."""
+  assert len(list(csv(file))) > 10
 
 def eg_data(file: str):
-  """Test Data object creation and column identification."""
-  d = Data(csv(file))
-  assert len(d.rows) > 0 and len(d.cols.y) > 0
-  assert len(d.cols.y) > 0 
-  [print(o(c)) for c in d.cols.all]
+  """Test that Data objects properly populate their columns."""
+  d = Data(csv(file)); assert len(d.rows) > 0 and len(d.cols.ys) > 0
 
-def eg_addsub(file:str):
-  """Test we can incrementally add/subtract from a Data."""
-  d  = Data(csv(file))
-  d2 = clone(d)
-  for r in d.rows: 
+def eg_addsub(file: str):
+  """Test that rows can be cleanly added and subtracted."""
+  d, d2 = Data(csv(file)), clone(Data(csv(file)))
+  for r in d.rows:
     add(d2,r)
-    if len(d2.rows)==100: m1=mids(d2)
-  m2 = mids(d2)
+    if len(d2.rows)==50: m1 = mids(d2)
+  print(o(mids(d2)))
   for r in d.rows[::-1]:
-     sub(d2,r)
-     if len(d2.rows)==100: m3=mids(d2)
-  assert all(abs(a - b) < 0.01 for a,b in zip(m1,m3))
-  print("add",o(m1))
-  print("all",o(m2))
-  print("sub",o(m3))
-
-# ---- 3. Distance ----
-def minkowski(items:Iterable[Qty]) -> float : # 0..1
-  """Calculates Minkowski distance for a list of items."""
-  d,n = 0, 1e-32
-  for item in items: d,n = d+item**the.p, n+1
-  return (d/n) ** (1/the.p)
+    sub(d2,r)
+    if len(d2.rows)==50: m2 = mids(d2)
+  print(o(m1))
+  print(o(m2))
+  assert all(abs(a-b) < 0.01 for a,b in zip(m1, m2))
+
+# ---- 4. Distance ----
+def minkowski(items: Iterable[Qty]) -> float:
+  """Calculate generic Minkowski distance parameterised by `the.p`."""
+  tot, n = 0, 1e-32
+  for item in items: tot, n = tot + item**the.p, n + 1
+  return (tot/n) ** (1/the.p)
 
 def disty(d: Data, r: Row) -> float:
-  """Measures how far a row is from the theoretical 'perfect' row."""
-  return minkowski(abs(norm(c,r[c.at])-c.goal) for c in d.cols.y)
+  """Calculate distance to the 'heaven' (perfect) row on dependent (Y) vars."""
+  return minkowski(abs(norm(c, r[c.at]) - c.heaven) for c in d.cols.ys)
 
-def distx(d: Data, r1: Row, r2:float) -> float:
-  """Measures distance between two rows."""
-  return minkowski(aha(c,r1[c.at],r2[c.at]) for c in d.cols.x)
+def distx(d: Data, r1: Row, r2: Row) -> float:
+  """Calculate distance between two rows on independent (X) vars."""
+  return minkowski(aha(c, r1[c.at], r2[c.at]) for c in d.cols.xs)
 
-def aha(c:Num|Sym, u:Any, v:Any) -> float:
-  """Retrn distance between 2 items in same column. For missing values, assume largest psssibe"""
-  if u==v=="?": return 1
-  if Sym==type(c): return u != v
-  u,v = norm(c,u), norm(c,v)
-  u = u if u != "?" else (0 if v>0.5 else 1)
-  v = v if v != "?" else (0 if u>0.5 else 1)
+def aha(c: Col, u: Any, v: Any) -> float:
+  """Calculate distance between two isolated values in a specific column."""
+  if u == v == "?": return 1
+  if Sym == type(c): return u != v
+  u, v = norm(c, u), norm(c, v)
+  u = u if u != "?" else (0 if v > 0.5 else 1)
+  v = v if v != "?" else (0 if u > 0.5 else 1)
   return abs(u - v)
 
-# ---  Distance Egs ---
-def eg_distx(file:str):
-  """Demo row distance to heaven."""
-  d  = Data(csv(file))
-  r1 = d.rows[0]
-  D  = lambda r2: distx(d,r1,r2)
-  print(*d.cols.names,sep="\t")
-  for r in sorted(d.rows,key=D)[::30]: print(*r,sep="\t")
+# --- Examples, distance ---
+def eg_distx(file: str):
+  """Test independent variable distance sorting."""
+  d, r1 = Data(csv(file)), Data(csv(file)).rows[0]
+  for r in sorted(d.rows, key=lambda r2: distx(d, r1, r2))[::30]: 
+    print(*r, sep="\t")
 
-def eg_disty(file:str):
-  """Demo row distance to heaven."""
+def eg_disty(file: str):
+  """Test dependent variable distance to optimal target."""
   d = Data(csv(file))
-  D = lambda r: disty(d,r)
-  print(*d.cols.names,sep="\t")
-  for r in sorted(d.rows,key=D)[::30]: 
-      print(*r,":",round(disty(d,r),2), sep="\t")
+  for r in sorted(d.rows, key=lambda r: disty(d, r))[::30]: 
+    print(*r, ":", round(disty(d, r), 2), sep="\t")
+
+# ---- 5. Stats ----
+def same(xs: list, ys: list, eps: float) -> bool:
+  """Check if two lists of numbers are statistically indistinguishable."""
+  xs, ys = sorted(xs), sorted(ys)
+  n, m = len(xs), len(ys)
+  if abs(xs[n//2] - ys[m//2]) <= eps: return True
+  gt = sum(bisect.bisect_left(ys, a) for a in xs)
+  lt = sum(m - bisect.bisect_right(ys, a) for a in xs)
+  if abs(gt - lt) / (n * m) > the.stats.cliffs: return False
+  ks = lambda v: abs(bisect.bisect_right(xs, v)/n - bisect.bisect_right(ys, v)/m)
+  return max(max(map(ks, xs)), max(map(ks, ys))) <= the.stats.conf * ((n+m)/(n*m))**.5
 
-# ---- 4. Cluster -----
-def kmeans(d: Data, rows=None, k=10, n=10, cents=None) -> Clusters:
-  """Mark rows by nearest centroids. Move centroids to mid of their rows. Repeat."""
-  rows, out = rows or d.rows, []
-  cents = cents or choices(rows, k=k)
+def bestRanks(d: dict) -> dict:
+  """Group treatments that are statistically tied for best."""
+  items = sorted(d.items(), key=lambda kv: sorted(kv[1])[len(kv[1])//2])
+  k0, lst0 = items[0]
+  best = {k0: adds(lst0, Num(k0))}
+  for k, lst in items[1:]:
+    if same(lst0, lst, spread(best[k0]) * the.stats.eps): 
+        best[k] = adds(lst, Num(k))
+    else: break
+  return best
+
+# --- Examples, stats ---
+def eg_same(): 
+  """Test statistical equivalence test."""
+  assert same([1,2,3], [1,2,3], 0.1)
+
+def eg_ranks():
+  """Test grouping of generated statistical ranges."""
+  d = {f"t{j}": [(10 if j<=5 else 20)*(-log(1-rand()))**(1/(2 if j<=5 else 1)) 
+                 for _ in range(50)] for j in range(1, 21)}
+  [print(f"  {k:<5} median: {o(mid(c))}") for k, c in bestRanks(d).items()]
+
+# ---- 6. Trees ----
+class Tree:
+  """A decision tree node holding data, splits, and children."""
+  def __init__(i, d: Data, rs: Rows):
+    i.d, i.ynum = clone(d, rs), adds((disty(d, r) for r in rs), Num())
+    i.col, i.cut, i.left, i.right = None, 0, None, None
+
+def _treeCuts(c: Col, rs: Rows) -> Iterable[Any]:
+  """Yield possible split points for a column."""
+  vs = [r[c.at] for r in rs if r[c.at] != "?"]
+  if not vs: return []
+  return set(vs) if Sym == type(c) else [sorted(vs)[len(vs)//2]]
+
+def _treeSplit(d: Data, c: Col, cut: Any, rs: Rows) -> tuple:
+  """Evaluate splitting rows on a specific column and cut point."""
+  l_rs, r_rs, l_num, r_num = [], [], Num(), Num()
+  for r in rs:
+    v = r[c.at]
+    go = v == "?" or (v == cut if Sym == type(c) else v <= cut)
+    (l_rs if go else r_rs).append(r)
+    add(l_num if go else r_num, disty(d, r))
+  return (l_num.n * spread(l_num) + r_num.n * spread(r_num), c, cut, l_rs, r_rs)
+
+def treeGrow(d: Data, rs: Rows) -> Tree:
+  """Recursively grow a decision tree to minimize Y-distance variance."""
+  t = Tree(d, rs)
+  if len(rs) >= 2 * the.learn.leaf:
+    splits = (_treeSplit(d, c, cut, rs) 
+              for c in t.d.cols.xs for cut in _treeCuts(c, rs))
+    if valid := [s for s in splits if min(len(s[3]), len(s[4])) >= the.learn.leaf]:
+      _, t.col, t.cut, left, right = min(valid, key=lambda x: x[0])
+      t.left, t.right = treeGrow(d, left), treeGrow(d, right)
+  return t
+
+def treeLeaf(t: Tree, r: Row) -> Tree:
+  """Traverse the tree to find the leaf node for a given row."""
+  if not t.left: return t
+  v = r[t.col.at]
+  go = (v != "?" and v <= t.cut) if Num == type(t.col) else (v != "?" and v == t.cut)
+  return treeLeaf(t.left if go else t.right, r)
+
+def treeNodes(t: Tree, lvl: int = 0, col: Col = None, op: str = "", 
+              cut: Any = None) -> Iterable[tuple]:
+  """Yield all nodes in the tree via depth-first search."""
+  yield t, lvl, col, op, cut
+  if t.col:
+    ops = ("<=", ">") if Num == type(t.col) else ("==", "!=")
+    kids = sorted([(t.left, ops[0]), (t.right, ops[1])], key=lambda z: mid(z[0].ynum))
+    for k, s in kids:
+      if k: yield from treeNodes(k, lvl + 1, t.col, s, t.cut)
+
+def treeShow(t: Tree) -> None:
+  """Print the full tree structure to standard output."""
+  for t1, lvl, col, op, cut in treeNodes(t):
+    p = f"{col.txt} {op} {o(cut)}" if col else ""
+    if lvl > 0: p = "|   " * (lvl - 1) + p
+    g = {c.txt: mid(c) for c in t1.d.cols.ys}
+    print(f"{p:<{the.show.Show}},{o(mid(t1.ynum)):>4} ,({t1.ynum.n:3}), {o(g)}")
+
+def treePlan(t: Tree, here: Tree) -> Iterable[tuple]:
+  """Yield plans (variable changes) to improve outcomes from current leaf."""
+  eps = the.stats.eps * spread(t.ynum)
+  for there, _, _, _, _ in treeNodes(t):
+    if there.col is None and (dy := mid(here.ynum) - mid(there.ynum)) > eps:
+      diff = [f"{c.txt}={o(mid(c))}" for c, h in zip(there.d.cols.xs, here.d.cols.xs) 
+              if mid(c) != mid(h)]
+      if diff: yield dy, mid(there.ynum), diff
+
+# --- Examples, trees ---
+def eg_see(file: str): 
+  """Test Rung 1: Show the associative properties of a grown tree."""
+  _, d_train, _ = ready(file)
+  treeShow(treeGrow(d_train, d_train.rows))
+
+def eg_act(file: str):
+  """Test Rung 2: Run test rows down the tree to flag anomalies."""
+  d, d_train, test = ready(file)
+  t = treeGrow(d_train, d_train.rows)
+  for r in sorted(test, key=lambda r: disty(d_train, r))[:10]:
+    lf = treeLeaf(t, r)
+    gap = disty(d_train, r) - mid(lf.ynum)
+    flag = " !" if abs(gap) > spread(lf.ynum) else "  "
+    print(f"{flag} actual={o(disty(d_train, r)):>5}  leaf={o(mid(lf.ynum)):>5}"
+          f"  gap={o(gap):>6}  n={lf.ynum.n}")
+
+def eg_imagine(file: str):
+  """Test Rung 3: Generate counterfactual plans to improve the worst row."""
+  d, d_train, _ = ready(file)
+  t = treeGrow(d_train, d_train.rows)
+  here = treeLeaf(t, max(d.rows, key=lambda r: disty(d, r)))
+  print(f"  now={o(mid(here.ynum))}")
+  for dy, score, diff in sorted(treePlan(t, here)):
+    print(f"  {o(score):>6} (dy={o(dy)}) if {', '.join(diff)}")
+
+def eg_test(file: str):
+  """Run full train/predict/score pipeline to optimize metrics."""
+  d0 = Data(csv(file))
+  outs, win = Num("win"), wins(d0)
+  for _ in range(20):
+    d, d_train, test_rows = ready(d0)
+    t = treeGrow(d_train, d_train.rows)
+    guess = sorted(test_rows, key=lambda r: mid(treeLeaf(t, r).ynum))
+    top = min(guess[:the.learn.Check], key=lambda r: disty(d_train, r))
+    add(outs, win(top))
+  print(int(mid(outs)))
+
+# ---- 7. Clustering ----
+def kmeans(d: Data, rs: Rows = None, k: int = 10, n: int = 10, 
+           cents: Rows = None) -> Datas:
+  """Cluster rows into `k` groups using nearest-centroid assignments."""
+  rs, out = rs or d.rows, []
+  cents = cents or choices(rs, k=k)
   for _ in range(n):
     out = [clone(d) for _ in cents]
-    for r in rows:
-      i = min(range(len(cents)), key=lambda j: distx(d,cents[j],r))
-      add(out[i], r)
+    for r in rs: add(out[min(range(len(cents)), key=lambda j: distx(d, cents[j], r))], r)
     cents = [mids(kid) for kid in out if kid.rows]
   return out
 
-def kpp(d: Data, rows=None, k=10, few=256) -> Rows:
-  """Select centrois that are probably distant to each other."""
-  rows = rows or d.rows
-  out = [choice(rows)]
+def kpp(d: Data, rs: Rows = None, k: int = 10, few: int = 256) -> Rows:
+  """Select initial k-means centroids maximizing distances (k-means++)."""
+  rs, out = rs or d.rows, [choice(rs or d.rows)]
   while len(out) < k:
-    t = sample(rows, min(few, len(rows)))
-    ws = {i: min(distx(d,t[i],c)**2 for c in out) for i in range(len(t))}
+    t = sample(rs, min(few, len(rs)))
+    ws = {i: min(distx(d, t[i], c)**2 for c in out) for i in range(len(t))}
     out.append(t[pick(ws)])
   return out
 
-def half(d: Data, rows, few=20) -> tuple:
-  """Divide data using 2 distant points."""
-  D = lambda r1,r2: distx(d,r1,r2)
-  t = sample(rows, min(few, len(rows)))
-  c, east, west = max(((D(r1,r2), r1, r2) for r1 in t for r2 in t),
-                      key=lambda z: z[0])
-  proj = lambda r: (D(r,east)**2 + c**2 - D(r,west)**2) / (2*c+1e-32)
-  rows = sorted(rows, key=proj)
-  n = len(rows) // 2
-  return rows[:n], rows[n:], east, west, c, proj(rows[n])
+def half(d: Data, rs: Rows, few: int = 20) -> tuple:
+  """Divide rows into two halves based on distance to two extreme points."""
+  t = sample(rs, min(few, len(rs)))
+  gap, east, west = max(((distx(d, r1, r2), r1, r2) for r1 in t for r2 in t),
+                        key=lambda z: z[0])
+  proj = lambda r: (distx(d, r, east)**2 + gap**2 - distx(d, r, west)**2) / (2*gap+1e-32)
+  rs = sorted(rs, key=proj)
+  n = len(rs) // 2
+  return rs[:n], rs[n:], east, west, gap, proj(rs[n])
  
-def rhalf(d: Data, rows=None, k=10, stop=None, few=20) -> Clusters:
-  """Recursively, diide data in half."""
-  rows = rows if rows is not None else d.rows
-  stop = stop or 20 #len(d.rows) / k
-  if len(rows) <= 2 * stop: return [clone(d, rows)]
-  l, r, east, west, c, cut = half(d, rows, few)
-  return  rhalf(d, l, k, stop, few) + rhalf(d, r, k, stop, few)
+def rhalf(d: Data, rs: Rows = None, k: int = 10, stop: int = None, 
+          few: int = 20) -> Datas:
+  """Recursively halve rows into clusters until hitting a size/depth limit."""
+  rs, stop = rs if rs is not None else d.rows, stop or 20
+  if len(rs) <= 2 * stop: return [clone(d, rs)]
+  l, r, east, west, gap, cut = half(d, rs, few)
+  return rhalf(d, l, k, stop, few) + rhalf(d, r, k, stop, few)
 
-def neighbors(d:Data, r1:Row, clusters:Clusters,near=1,fast=False) -> Rows:
-  """Return kth rows near r1 within some clusters."""
-  c = min(clusters, key=lambda c:distx(d,r1,mids(c)))
-  return [mids(c)] if fast else sorted(c.rows, key=lambda r2:distx(d,r1,r2))[:near]
+def neighbors(d: Data, r1: Row, ds: Datas, near: int = 1, fast: bool = False) -> Rows:
+  """Find the `near`-est rows (or nearest cluster centroid if `fast`) to `r1`."""
+  c = min(ds, key=lambda c: distx(d, r1, mids(c)))
+  return [mids(c)] if fast else sorted(c.rows, key=lambda r2: distx(d, r1, r2))[:near]
 
-# ---  Cluster Eg (Evaluation) ---
-def say(*args, **kwargs): print(*args, file=sys.stderr, **kwargs, flush=True,end="")
-
-def _cluster(d,build,near=1, few=100, repeats=10, fast=False):
-  """Report on one clustering method."""
-  length, t_build, t_apply, err = len(d.rows)//2, 0, 0, 0
+def _cluster(d0: Data, build: Callable, near: int = 1, fast: bool = False) -> list[str]:
+  """Benchmark clustering algorithms, returning timing and error metrics."""
+  t_build, t_apply, err, repeats = 0, 0, 0, 10
   for _ in range(repeats):
-    shuffle(d.rows)
-    test,train = d.rows[length:][:few], clone(d,d.rows[:length])
-    def predict(rs):
-      return sum(disty(train,r) for r in rs) / len(rs) if rs else 0
-    t_1=now()
-    clusters = build(train)
-    t_2=now()
+    d, train, test = ready(d0)
+    predict = lambda rs: sum(disty(train, r) for r in rs)/len(rs) if rs else 0
+    t_1 = now()
+    ds = build(train)
+    t_2 = now()
     t_build += t_2 - t_1
     for r in test: 
-      err += abs(disty(d,r) - predict(neighbors(train,r,clusters,near=near,fast=fast)))/len(test)
-    t_apply += now()-t_2
+      near_rs = neighbors(train, r, ds, near=near, fast=fast)
+      err += abs(disty(d, r) - predict(near_rs)) / len(test)
+    t_apply += now() - t_2
   return [f"{x/repeats:>7.2f}" for x in [t_build/1e6, t_apply/1e6, err]] 
 
-#have to wrok tithir this
+# --- Examples, clustering ---
 def eg_cluster(file: str):
-  """Helper for eg_cluster""" 
-  d = Data(csv(file))
-  k = 16 # number of clusters
-  near=1 # number of near neighboring rows
-  all = adds(disty( d,r) for r in d.rows)
+  """Run clustering benchmark table comparing baseline, kmeans, and rhalf."""
+  d = Data(csv(file)); k, near = 16, 1
+  all_y = adds((disty(d, r) for r in d.rows), Num())
   print(f"{'Algorithm':<10} | {'T_Build':>7} | {'T_Apply':>7} | "
-        f"{'Err':>7} (small: {.35*spread(all):.2f})")
+        f"{'Err':>7} (small: {.35*spread(all_y):.2f})")
   print("-" * 43)
-  print("baseline   | ", *_cluster(d, lambda d1: [d1],  near))
-  print("sample     | ", *_cluster(d, lambda d1: [clone(d,sample(d.rows,32))],  near))
-  print("rhalf      | ", *_cluster(d, lambda d1: rhalf(d1, k=k),near))
-  print("kmeans     | ", *_cluster(d, lambda d1: kmeans(d1, k=k),near))
-  print("kpp        | ", *_cluster(d, 
-                                   lambda d1: kmeans(d1, k=k, cents=kpp(d1, k=k)),
-                                   near))
- 
-  print("rhalf fast | ", *_cluster(d, lambda d1: rhalf(d1, k=k),near,fast=True))
-  print("kmeans fast| ", *_cluster(d, lambda d1: kmeans(d1, k=k),near,fast=True))
-  print("kpp fast   | ", *_cluster(d, 
-                                   lambda d1: kmeans(d1, k=k, cents=kpp(d1, k=k)),
-                                   near,fast=True))
- 
-# ---- Main ----
-# Start-up.
+  
+  B  = lambda d1: [d1]
+  S1 = lambda d1: [clone(d, sample(d.rows, 32))]
+  RH = lambda d1: rhalf(d1, k=k)
+  KM = lambda d1: kmeans(d1, k=k)
+  KP = lambda d1: kmeans(d1, k=k, cents=kpp(d1, k=k))
 
-if __name__=="__main__": cli()
+  for txt, fn, fast in [("baseline", B, False), ("sample", S1, False),
+                        ("rhalf", RH, False), ("kmeans", KM, False),
+                        ("kpp", KP, False), ("rhalf f", RH, True),
+                        ("kmeans f", KM, True), ("kpp f", KP, True)]:
+    print(f"{txt:<10} | ", *_cluster(d, fn, near, fast=fast))
+
+# ---- 8. Start Up ----
+the = S()
+for k, v in re.findall(r"([\w.]+)=(\S+)", __doc__): _nest(the, k, thing(v)) 
 
+if __name__ == "__main__": cli()

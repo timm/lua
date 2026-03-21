@@ -45,6 +45,7 @@ Run all tests:
     ./tree.py --all ~/gits/moot/optimize/misc/auto93.csv   
 
 """
+from __future__ import annotations
 from time import perf_counter_ns as now
 import re, random, sys, bisect
 from math import log,log2,exp
@@ -412,29 +413,30 @@ def eg_act(f: str):
 
 # --- Imagine (rung 3): perturb test, rank what-ifs ---
 # Covers: forecast + root cause+simulate (what-if on worst).
-# def distx(here, there, root_cols):
-#   """Calculates X-distance between two leaves using Minkowski (matches disty)."""
-#   return mink(abs(norm(cx, mid(c1)) - norm(cx, mid(c2))) if type(cx)==Num else int(mid(c1)!=mid(c2)) 
-#               for cx, c1, c2 in zip(root_cols, here.d.cols.x, there.d.cols.x))
-#
-# def plan(t, here, root_cols):
-#   """Yields beneficial jumps to other clusters."""
-#   for there in leaves(t):
-#     if (dy := mid(here.y) - mid(there.y)) > 0.35 * spread(t.y):
-#       dx = distx(here, there, root_cols)
-#       diff = [f"{c2.txt}={o(mid(c2))}" for c1, c2 in zip(here.d.cols.x, there.d.cols.x) if mid(c1) != mid(c2)]
-#       yield dy - dx, dy, dx, mid(there.y), diff
-#
-# def eg_imagine(f: str):
-#   """Imagine: forecast + simulate (what-if on worst)."""
-#   d, d2, t, test = ready(f)
-#   here = leaf(t, max(test, key=lambda r: disty(d2, r)))
-#   print(f"  now={o(mid(here.y))}")
-#
-#   for _, dy, dx, s, diff in sorted(plan(t, here, d2.cols.x), reverse=True):
-#     print(f"  {o(s):>5} if {', '.join(diff)}  <-- dy:{o(dy)} dx:{o(dx)}")
-#
-#
+def plan(t, d, here):
+  eps = 0.35 * spread(t.y)
+  for there,_,_,_,_ in nodes(t):
+    if there.col is None:
+      dy = mid(here.y) - mid(there.y)
+      if dy > eps:
+        diff = [f"{c.txt}={o(mid(c))}" 
+                for c,h in zip(there.d.cols.x, here.d.cols.x)
+                if mid(c) != mid(h)]
+        if diff:
+          yield dy, mid(there.y), diff
+
+def eg_imagine(file:str):
+  "counterfactual: what changes improve worst outcomes?"
+  d = Data(csv(file))
+  random.shuffle(d.rows)
+  rows = d.rows[:the.learn.Budget]
+  t = build(d, rows)                              # <-- not Tree()
+  worst = max(d.rows, key=lambda r: disty(d, r))
+  here  = leaf(t, worst)
+  print(f"  now={o(mid(here.y))}")
+  for dy, score, diff in sorted(plan(t, d, here)):
+    print(f"  {o(score):>6} (dy={o(dy)}) if {', '.join(diff)}")
+   
 # --- Full pipeline test (20 repeats) ---
 def eg_test(f: str):
   """Run full train/predict/score pipeline."""
