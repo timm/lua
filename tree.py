@@ -275,7 +275,7 @@ def wins(d: Data):
   lo, med = min(ds), sorted(ds)[len(ds)//2]
   return lambda r: int(100*(1-((disty(d,r)-lo) / (med-lo+1e-32))))
 
-def cli(fns, the): --
+def cli(fns, the): 
   """Executes functions or updates the configuration object via CLI arguments."""
   args = sys.argv[1:]
   while args:
@@ -284,14 +284,14 @@ def cli(fns, the): --
     if fn := fns.get(f"eg_{k}"):
       fn(*[thing(args.pop(0)) for arg in fn.__annotations__])
     else:
-      nested_et_dot(the, k, thing(args.pop(0)))  
+      nested_set_dot(the, k, thing(args.pop(0)))  
 
-def setup(s:str): --
+def setup(s:str): 
   out = S()
   for k, v in re.findall(r"([\w.]+)=(\S+)", s): nested_set_dot(out, k, thing(v)) 
   return out
 
-def nested_set_dot(t, k, v): --
+def nested_set_dot(t, k, v): 
   """Sets a value in a nested namespace using dot notation (e.g., 'a.b.c')."""
   for x in (ks := k.split("."))[:-1]: t=t.__dict__.setdefault(x, S())
   setattr(t, ks[-1], v)
@@ -412,18 +412,29 @@ def eg_act(f: str):
 
 # --- Imagine (rung 3): perturb test, rank what-ifs ---
 # Covers: forecast + root cause+simulate (what-if on worst).
-def eg_imagine(f: str):
-  """Imagine: forecast + root cause + simulate (what-if on worst)."""
-  d, d2, t, test = ready(f)
-  r = max(test, key=lambda r: disty(d2, r))
-  now = mid(leaf(t, r).y)
-  plans = [(mid(whatif(t, r, c).y), c.txt, mid(c))
-           for c in d2.cols.x]
-  print(f"  now={o(now)}")
-  for s, name, val in sorted(plans):
-    print(f"  {o(s):>5} if {name}={o(val)}"
-          f"{'  <-- improves' if s < now else ''}")
-
+# def distx(here, there, root_cols):
+#   """Calculates X-distance between two leaves using Minkowski (matches disty)."""
+#   return mink(abs(norm(cx, mid(c1)) - norm(cx, mid(c2))) if type(cx)==Num else int(mid(c1)!=mid(c2)) 
+#               for cx, c1, c2 in zip(root_cols, here.d.cols.x, there.d.cols.x))
+#
+# def plan(t, here, root_cols):
+#   """Yields beneficial jumps to other clusters."""
+#   for there in leaves(t):
+#     if (dy := mid(here.y) - mid(there.y)) > 0.35 * spread(t.y):
+#       dx = distx(here, there, root_cols)
+#       diff = [f"{c2.txt}={o(mid(c2))}" for c1, c2 in zip(here.d.cols.x, there.d.cols.x) if mid(c1) != mid(c2)]
+#       yield dy - dx, dy, dx, mid(there.y), diff
+#
+# def eg_imagine(f: str):
+#   """Imagine: forecast + simulate (what-if on worst)."""
+#   d, d2, t, test = ready(f)
+#   here = leaf(t, max(test, key=lambda r: disty(d2, r)))
+#   print(f"  now={o(mid(here.y))}")
+#
+#   for _, dy, dx, s, diff in sorted(plan(t, here, d2.cols.x), reverse=True):
+#     print(f"  {o(s):>5} if {', '.join(diff)}  <-- dy:{o(dy)} dx:{o(dx)}")
+#
+#
 # --- Full pipeline test (20 repeats) ---
 def eg_test(f: str):
   """Run full train/predict/score pipeline."""

@@ -364,20 +364,20 @@ def half(d: Data, rows, few=20) -> tuple:
 def rhalf(d: Data, rows=None, k=10, stop=None, few=20) -> Clusters:
   """Recursively, diide data in half."""
   rows = rows if rows is not None else d.rows
-  stop = stop or len(d.rows) / k
+  stop = stop or 20 #len(d.rows) / k
   if len(rows) <= 2 * stop: return [clone(d, rows)]
   l, r, east, west, c, cut = half(d, rows, few)
   return  rhalf(d, l, k, stop, few) + rhalf(d, r, k, stop, few)
 
-def neighbors(d:Data, r1:Row, clusters:Clusters,near=1) -> Rows:
+def neighbors(d:Data, r1:Row, clusters:Clusters,near=1,fast=False) -> Rows:
   """Return kth rows near r1 within some clusters."""
   c = min(clusters, key=lambda c:distx(d,r1,mids(c)))
-  return sorted(c.rows, key=lambda r2:distx(d,r1,r2))[:near]
+  return [mids(c)] if fast else sorted(c.rows, key=lambda r2:distx(d,r1,r2))[:near]
 
 # ---  Cluster Eg (Evaluation) ---
 def say(*args, **kwargs): print(*args, file=sys.stderr, **kwargs, flush=True,end="")
 
-def _cluster(d,build,near=1, few=100, repeats=20):
+def _cluster(d,build,near=1, few=100, repeats=10, fast=False):
   """Report on one clustering method."""
   length, t_build, t_apply, err = len(d.rows)//2, 0, 0, 0
   for _ in range(repeats):
@@ -390,7 +390,7 @@ def _cluster(d,build,near=1, few=100, repeats=20):
     t_2=now()
     t_build += t_2 - t_1
     for r in test: 
-      err += abs(disty(d,r) - predict(neighbors(train,r,clusters,near=near)))/len(test)
+      err += abs(disty(d,r) - predict(neighbors(train,r,clusters,near=near,fast=fast)))/len(test)
     t_apply += now()-t_2
   return [f"{x/repeats:>7.2f}" for x in [t_build/1e6, t_apply/1e6, err]] 
 
@@ -411,6 +411,12 @@ def eg_cluster(file: str):
   print("kpp        | ", *_cluster(d, 
                                    lambda d1: kmeans(d1, k=k, cents=kpp(d1, k=k)),
                                    near))
+ 
+  print("rhalf fast | ", *_cluster(d, lambda d1: rhalf(d1, k=k),near,fast=True))
+  print("kmeans fast| ", *_cluster(d, lambda d1: kmeans(d1, k=k),near,fast=True))
+  print("kpp fast   | ", *_cluster(d, 
+                                   lambda d1: kmeans(d1, k=k, cents=kpp(d1, k=k)),
+                                   near,fast=True))
  
 # ---- Main ----
 # Start-up.
