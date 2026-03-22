@@ -13,8 +13,9 @@ Options:
   --seed=1              set random number seed      
   --p=2                 distance (1=Manhattan, 2=Euclidean)
   --learn.leaf=3        examples per leaf in a tree      
-  --learn.Budget=50     number of rows to evaluate      
-  --learn.Check=5       number of guesses to check      
+  --learn.budget=50     number of rows to evaluate      
+  --learn.check=5       number of guesses to check      
+  --learn.warmStart=4   initial number of labels
   --stats.cliffs=0.195  threshold for Cliff's Delta      
   --stats.conf=1.36     confidence coefficient for KS test
   --stats.eps=0.35      margin of error multiplier      
@@ -166,7 +167,7 @@ def spread(c: Col) -> float:
 def norm(c: Num, v: Qty) -> float:
   """Normalize numeric values using a logistic function."""
   if v == "?": return v
-  return 1 / (1 + exp(-1.7 * (v - c.mu) / (spread(c) + 1e-32)))
+  return 0.5 if c.sd==0 else 1/(1 + exp(-1.7*(v - c.mu) / (c.sd+1e-32)))
 
 def pick(it: Any) -> Any:
   """Randomly sample a value from a distribution."""
@@ -259,7 +260,7 @@ def ready(file: Any) -> tuple[Data, Data, Rows]:
   d = file if Data == type(file) else Data(csv(file))
   rs = sample(d.rows, len(d.rows)) 
   n = len(rs) // 2
-  return d, clone(d, rs[:n][:the.learn.Budget]), rs[n:]
+  return d, clone(d, rs[:n][:the.learn.budget]), rs[n:]
 
 # --- Examples, data (tables) ---
 def eg_cols(): 
@@ -290,7 +291,61 @@ def eg_addsub(file: str):
   print(o(m1))
   print(o(m2))
   assert all(abs(a-b) < 0.01 for a,b in zip(m1, m2))
-
+
+def like(c:Col, v:Any) -> float:
+  """Return how much a column likes a value."""
+  if type(c) == Sym:
+    return (c.has.get(v,0) + the.bayes.m/the.bayes.k) / (c.n + the.bayes.m)
+  sd = c.sd + 1e-32
+  return math.exp(-0.5*((v-c.mu)/sd)**2) / (sd * (2*math.pi)**.5)
+
+def likes(d:Data, r:row, nh:int=2, nall:int=100) -> float:
+  """Return how much a data likes a row."""
+  prior = (nh + the.bayes.k) / (nall + 2*the.bayes.k)
+  out   = math.log(prior)
+  for c in d.cols.x:
+    if (v := r[c.at]) != "?":
+      out += math.log(like(c, v) + 1e-32)
+  return out
+
+def acquireWithBayes(d:Data, best:Data, rest:Data, r:row) -> float:
+  """What is the delta between how best or rest is a row?"""
+  n = len(best.rows) + len(rest.rows)
+  return likes(rest, r, len(rest.rows), n) - likes(best, r, len(best.rows), n)
+
+def acquireeWithCentroid(d:Data, best:Data, rest:Data, r:row) -> float:
+  """What is the delta between how best or rest is a row?"""
+  return distx(d,r,mids(rest)) - distx(lab,r,mids(best))
+
+def acquire(d, score=acquireWithCentroid) -> Rows, callable:
+  """Using rows labelled so far, pick what row to label next."""
+  rows      = shuffle(d.rows[:])
+  m         = the.learn.warmStart
+  lab,unlab = clone(d,rows[:m]), rows[m:][:the.few]
+  lab.rows.sort(key=lambda r: disty(d,r))
+  n         = int(len(lab.rows)**.5)
+  best,rest = clone(d,lab.rows[:n]), clone(d,lab.rows[n:])
+  scorefn   = lambda r: score(lab,best,rest,r)
+  j = 0
+  for _ in range(the.learn.budget):
+    for _ in range(len(unlab)): # always look at |unlab| items
+      row = unlab[j]
+      if scorefn(row) < 0:
+        unlab.pop(j)
+        add(lab, 
+          add(best, row))
+        if len(best.rows) > int(len(lab.rows)**.5):
+          best.rows.sort(key=lambda r: disty(d,r))
+          add(rest, 
+            sub(best, best.rows[-1]))
+        j = j % len(unlab) if unlab else 0
+        break # break if good score found, so next time 
+      j = (j+1) % len(unlab)
+    else: # no good scores found, so exit
+      break
+  lab.rows.sort(key=lambda r: score(lab,best,rest,r))
+  return lab, scorefn
+ 
 # ---- 4. Distance ----
 def minkowski(items: Iterable[Qty]) -> float:
   """Calculate generic Minkowski distance parameterised by `the.p`."""
@@ -431,12 +486,12 @@ def treePlan(t: Tree, here: Tree) -> Iterable[tuple]:
       if diff: yield dy, mid(there.ynum), diff
 
 # --- Examples, trees ---
-def eg_see(file: str): 
+def eg_tree(file: str): 
   """Test Rung 1: Show the associative properties of a grown tree."""
   _, d_train, _ = ready(file)
   treeShow(treeGrow(d_train, d_train.rows))
 
-def eg_act(file: str):
+def eg_funny(file: str):
   """Test Rung 2: Run test rows down the tree to flag anomalies."""
   d, d_train, test = ready(file)
   t = treeGrow(d_train, d_train.rows)
@@ -447,7 +502,7 @@ def eg_act(file: str):
     print(f"{flag} actual={o(disty(d_train, r)):>5}  leaf={o(mid(lf.ynum)):>5}"
           f"  gap={o(gap):>6}  n={lf.ynum.n}")
 
-def eg_imagine(file: str):
+def eg_plan(file: str):
   """Test Rung 3: Generate counterfactual plans to improve the worst row."""
   d, d_train, _ = ready(file)
   t = treeGrow(d_train, d_train.rows)
@@ -464,7 +519,7 @@ def eg_test(file: str):
     d, d_train, test_rows = ready(d0)
     t = treeGrow(d_train, d_train.rows)
     guess = sorted(test_rows, key=lambda r: mid(treeLeaf(t, r).ynum))
-    top = min(guess[:the.learn.Check], key=lambda r: disty(d_train, r))
+    top = min(guess[:the.learn.check], key=lambda r: disty(d_train, r))
     add(outs, win(top))
   print(int(mid(outs)))
 
