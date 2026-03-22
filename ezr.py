@@ -1,10 +1,10 @@
 #!/usr/bin/env python3 -B
 """
-ezr1.py: explainable multi-objective optimization   
+ezr.py: explainable multi-objective optimization   
 (c) 2026 Tim Menzies, timm@ieee.org, MIT license   
   
 Usage: 
-  ./ezr1.py [OPTIONS] [ARGS]   
+  ./ezr.py [OPTIONS] [ARGS]   
 
 Options:
   -h                    show help on command line options     
@@ -15,12 +15,17 @@ Options:
   --learn.leaf=3        examples per leaf in a tree      
   --learn.budget=50     number of rows to evaluate      
   --learn.check=5       number of guesses to check      
-  --learn.warmStart=4   initial number of labels
+  --learn.start=4       initial number of labels
+  --bayes.m=2           m-estimate for Naive Bayes
+  --bayes.k=1           k-estimate (Laplace smoothing) for Naive Bayes
+  --few=512             max number of unlabelled rows to evaluate in active learning
   --stats.cliffs=0.195  threshold for Cliff's Delta      
   --stats.conf=1.36     confidence coefficient for KS test
   --stats.eps=0.35      margin of error multiplier      
-  --show.Show=30        display width/padding for trees      
-  --show.Decimals=2     number of decimals for floats      
+  --show.show=30        display width/padding for trees      
+  --show.decimals=2     number of decimals for floats      
+
+Command-line actions:
   --see   file          see: show tree (rung 1)   
   --act   file          act: test vs leaf (rung 2)   
   --imagine file        imagine: what-if (rung 3)   
@@ -28,33 +33,48 @@ Options:
   --cluster file        run clustering benchmark table
    
 Input is CSV. Header (row 1) defines column roles:   
-  [A-Z]* : Numeric (e.g. "Age").      
-  [a-z]* : Symbolic (e.g. "job").      
-  *+     : Maximize (e.g. "Pay+").     
-  *-     : Minimize (e.g. "Cost-").      
-  *X     : Ignored (e.g. "idX").        
-  ?      : Missing value (not in header)      
+
+- [A-Z]* :  Numeric (e.g. "Age").      
+- [a-z]* : Symbolic (e.g. "job").      
+- [A-Z]*+ : Maximize Numeric goal (e.g. "Pay+").     
+- [A-Z]*- : Minimize Numeric goal (e.g. "Cost-").      
+- [a-z]*! : Class (e.g. sick!").
+- *X      : Ignored (e.g. "idX").        
+- ?       : Missing value (not in header)      
+
+To install and test, download http://githib.com/timm/lua/ezr.py. Then:   
+   
+    chmod +x ezr.py      
+    mkdir -p $HOME/gits   # download sample data       
+    git clone http://github.com/timm/moot $HOME/gits/moot      
+    ./ezr.py --see ~/gits/moot/optimize/misc/auto93.csv      
+
+Run all tests:
+
+    ./ezr.py --all ~/gits/moot/optimize/misc/auto93.csv   
+
 """
 from __future__ import annotations
 from time import perf_counter_ns as now
-import re, random, sys, bisect
+import os, re, random, sys, bisect, math
+from pathlib import Path
 from random import random as rand, choices, choice, sample, shuffle
-from math import log, log2, exp
+from math import log, log2, exp, sqrt, pi
 from typing import Any, Iterable, Callable
 from types import SimpleNamespace as S
 
 # Naming conventions:
-#  i   : self
-#  j   : iterator variable
-#  c   : any column (Num or Sym)
-#  d   : Data (rows + summarized columns)
-#  ds  : Datas (list of Data objects)
-#  r   : row (a single list of values)
-#  rs  : rows (a list of lists)
-#  x   : an x-column specifically (independent)
-#  y   : a y-column specifically (dependent)
-#  t   : Tree node
-#  txt : string
+# - `i`   : self
+# - `j`   : iterator variable
+# - `c`   : any column (Num or Sym)
+# - `d`   : Data (rows + summarized columns)
+# - `ds`  : Datas (list of Data objects)
+# - `r`   : row (a single list of values)
+# - `rs`  : rows (a list of lists)
+# - `x`   : an x-column specifically (independent)
+# - `y`   : a y-column specifically (dependent)
+# - `t`   : Tree node
+# - `txt` : string
 
 type Qty   = int | float
 type Atom  = str | bool | Qty
@@ -64,6 +84,83 @@ type Col   = Num | Sym
 type Cols  = list[Col]
 type Tree  = Any  # Type hinting wrapper
 type Datas = list[Data]
+
+
+# ---- 0. Utilities ----
+def o(x: Any) -> str:
+  """Recursively format objects. Sorts dicts for stable table columns."""
+  if isinstance(x, float): return f"{x:.{the.show.decimals}f}"
+  if isinstance(x, dict):  return "{"+", ".join(f"{k}={o(v)}" for k,v in sorted(x.items()))+"}"
+  if isinstance(x, list):  return "{"+", ".join(map(o, x))+"}"
+  if isinstance(x, S):     return "S" + o(x.__dict__)
+  if hasattr(x, "__dict__"): return x.__class__.__name__ + o(x.__dict__)
+  return str(x)
+  
+def table(lst: list, w: int = 10) -> None:
+  """Print a list of dicts or objects as an aligned table."""
+  if not lst: return
+  ds = [x if type(x) is dict else x.__dict__ for x in lst]
+  ks = list(ds[0].keys())
+  print("".join(f"{str(k):>{w}}" for k in ks))
+  print("-" * (len(ks) * w))
+  for d in ds: print("".join(f"{str(d.get(k, '')):>{w}}" for k in ks))
+
+def thing(txt: str) -> Atom:
+  """Coerce strings into numbers or booleans."""
+  txt = txt.strip()
+  b = lambda s: {"true": 1, "false": 0}.get(s.lower(), s)
+  for f in [int, float, b]:
+    try: return f(txt)
+    except ValueError: pass
+
+def _nest(t: Any, k: str, v: Any) -> None:
+  """Set value in nested namespace (e.g., 'a.b.c')."""
+  for x in (ks := k.split("."))[:-1]: t = t.__dict__.setdefault(x, S())
+  setattr(t, ks[-1], v)
+
+def csv(f: str, clean: Callable = lambda s: s.partition("#")[0].split(",")) -> Iterable:
+  """Yield formatted and typed rows from a CSV file."""
+  with open(f, encoding="utf-8") as file:
+    for s in file:
+      r = clean(s)
+      if any(x.strip() for x in r): yield [thing(x) for x in r]
+
+# --- Util examples ---
+def eg_o():
+  """Test string formatting of various data types."""
+  class Tmp:
+    def __init__(i): i.x, i.y = 1, 2
+  
+  # Note: relies on global 'the.show.decimals' being set
+  print(o(3.14159)) 
+  print(o([1, {"a": 2}, Tmp()]))
+
+def eg_table():
+  """Test tabular formatting of dictionaries and objects."""
+  lst = [
+    {"name": "tim", "age": 21, "shoe": 10},
+    {"name": "tom", "age": 22, "shoe": 9.5}
+  ]
+  table(lst, w=8)
+
+def eg_thing(): 
+  """Test string coercion to correct types."""
+  assert thing("3.14") == 3.14
+  assert thing(" true ") in [True, 1]
+  assert thing(" false ") in [False, 0]
+  assert thing("hello") == "hello"
+  print("ok")
+
+def eg_nest():
+  """Test deep setting in a nested namespace."""
+  t = S()
+  _nest(t, "a.b.c", 42)
+  assert t.a.b.c == 42
+  print(o(t))
+
+def eg_csv(file: str): 
+  """Test that CSV reader extracts data."""
+  assert len(list(csv(file))) > 10
 
 # ---- 1. Config & CLI ----
 def cli() -> None:
@@ -77,29 +174,6 @@ def cli() -> None:
     else: 
       _nest(the, k, thing(args.pop(0)))  
 
-def _nest(t: Any, k: str, v: Any) -> None:
-  """Set value in nested namespace (e.g., 'a.b.c')."""
-  for x in (ks := k.split("."))[:-1]: t = t.__dict__.setdefault(x, S())
-  setattr(t, ks[-1], v)
-
-def thing(txt: str) -> Atom:
-  """Coerce strings into numbers or booleans."""
-  txt = txt.strip()
-  b = lambda s: {"true": 1, "false": 0}.get(s.lower(), s)
-  for f in [int, float, b]:
-    try: return f(txt)
-    except ValueError: pass
-
-def o(x: Any) -> str:
-  """Recursively format objects for neat printing."""
-  t = type(x)
-  if float == t: return f"{x:.{the.show.Decimals}f}"
-  if dict == t:  return "{"+", ".join(f"{k}={o(v)}" for k,v in x.items())+"}"
-  if list == t:  return "{"+", ".join(map(o, x))+"}"
-  if S == t:     return "S" + o(x.__dict__)
-  if hasattr(x, "__dict__"): return x.__class__.__name__ + o(x.__dict__)
-  return str(x)
-
 # --- Examples, config & CLI ---
 def eg_h(): 
   """Print the help text."""
@@ -108,11 +182,6 @@ def eg_h():
 def eg_the(): 
   """Test that config dictionary parses correctly."""
   print(o(the)); assert int == type(the.seed)
-
-def eg_thing(): 
-  """Test string coercion to correct types."""
-  assert thing("3.14") == 3.14 and thing(" true ") in [True, 1]
-  print("ok")
 
 def eg_list():
   """List all available example functions and their signatures."""
@@ -127,6 +196,7 @@ def eg_egs(file: str):
     print(f"\n--- {k} ----\n{fn.__doc__}")
     random.seed(the.seed)
     fn(file) if "file" in fn.__annotations__ else fn()
+
 
 # ---- 2. Columns ----
 def Col(txt: str = "", a: int = 0) -> Col: 
@@ -200,6 +270,7 @@ def eg_pick():
   c2 = adds([pick(c1) for _ in range(1000)],Sym())
   assert mid(c1)== mid(c2)
   assert abs(spread(c1) - spread(c2)) < 0.1
+
 
 # ---- 3. Data (Tables) ----
 class Data:
@@ -213,8 +284,9 @@ class Cols:
   """Extracts and organizes Num and Sym columns from header strings."""
   def __init__(i, names: list[str]):
     i.names, i.all = names, [Col(txt, j) for j, txt in enumerate(names)]
-    i.xs = [c for c in i.all if c.txt[-1] not in "+-!X"]
-    i.ys = [c for c in i.all if c.txt[-1] in "+-!"]
+    i.klass = next((c for c in i.all if c.txt[-1] == "!"), None)
+    i.xs    = [c for c in i.all if c.txt[-1] not in "+-!X"]
+    i.ys    = [c for c in i.all if c.txt[-1] in "+-!"]
 
 def clone(d: Data, rs: list = None) -> Data: 
   """Create an empty Data object with the same columns, adding optional rows."""
@@ -242,13 +314,6 @@ def adds(src: Iterable, it: Any = None) -> Data | Col:
   """Add multiple items from an iterable into the target object."""
   it = it or Num(); [add(it, v) for v in (src or [])]; return it
 
-def csv(f: str, clean: Callable = lambda s: s.partition("#")[0].split(",")) -> Iterable:
-  """Yield formatted and typed rows from a CSV file."""
-  with open(f, encoding="utf-8") as file:
-    for s in file:
-      r = clean(s)
-      if any(x.strip() for x in r): yield [thing(x) for x in r]
-
 def wins(d: Data) -> Callable:
   """Return a function that scores rows based on distance to heaven."""
   ds = [disty(d, r) for r in d.rows]
@@ -262,6 +327,90 @@ def ready(file: Any) -> tuple[Data, Data, Rows]:
   n = len(rs) // 2
   return d, clone(d, rs[:n][:the.learn.budget]), rs[n:]
 
+# ---- Bayes ----
+def like(c: Col, v: Any, prior) -> float:
+  """Return how much a column likes a value."""
+  if type(c) == Sym:
+    return (c.has.get(v,0) + the.bayes.k*prior) / (c.n + the.bayes.k)
+  sd = c.sd + 1e-32
+  return (1/sqrt(2*pi*sd*sd)) * exp(-((v-c.mu)**2) / (2*sd*sd))
+
+def likes(d: Data, r: Row, n_rows: int, n_klasses: int) -> float:
+  "Return log likelihood of row r given data d."
+  prior = (len(d.rows)+the.bayes.m) / (n_rows + the.bayes.m * n_klasses)
+  ls    = [like(c,v,prior) for c in d.cols.xs if (v:=r[c.at])!="?"]
+  return log(prior) + sum(log(v) for v in ls if v>0)
+
+def classify(src: Iterable, wait: int = 10) -> dict:
+  "Test then train: classify row using existing models before updating them."
+  src = iter(src)
+  h, cf, all = {}, Confuse(), Data([next(src)])
+  for n, r in enumerate(src):
+    want = r[all.cols.klass.at]
+    if n >= wait:
+      confuse(cf, want, max(h, key=lambda kl: likes(h[kl],r,len(all.rows),len(h))))
+    if want not in h: h[want] = clone(all)
+    add(all, add(h[want], r))
+  return cf
+   
+# --- Examples, bayes ---
+def eg_bayes():
+  """Test incremental Naive Bayes classification on hard-wired soybean path."""
+  path = Path.home() / "gits/moot/classify/soybean.csv"
+  if not path.exists(): 
+    return print(f"File not found: {path}")
+  print(f"Naive Bayes (scaled 0..100) on: {path}\n")
+  cf = classify(csv(str(path)))
+  table(confused(cf), w=7)
+   
+def acquireWithBayes(d: Data, best: Data, rest: Data, r: Row) -> float:
+  """What is the delta between how best or rest is a row?"""
+  n = len(best.rows) + len(rest.rows)
+  return likes(rest, r, n, 2) - likes(best, r, n, 2)
+
+def acquireWithCentroid(d: Data, best: Data, rest: Data, r: Row) -> float:
+  """What is the delta between how best or rest is a row?"""
+  return distx(d,r,mids(rest)) - distx(d,r,mids(best))
+
+def acquire(d, score=acquireWithBayes, label=lambda x:x) -> (Rows,callable):
+  """Using rows labelled so far, pick what unlabelled to label next."""
+  rows = d.rows[:]
+  shuffle(rows)
+  lab,unlab = clone(d,rows[:the.learn.start]), rows[the.learn.start:][:the.few]
+  lab.rows.sort(key=lambda r: disty(d,r))
+  n         = sqrt(len(lab.rows))
+  best,rest = clone(d,lab.rows[:int(n)]), clone(d,lab.rows[int(n):])
+  cursor = 0
+  fn = lambda r: score(lab, best, rest, r)
+  for _ in range(the.learn.budget):
+    for j in range(len(unlab)):  # scan at most one full cycle
+      idx = (cursor + j) % len(unlab)  # calculate circular offset safely
+      if fn(unlab[idx]) < 0:
+        add(lab, 
+          add(best, 
+            label(
+              unlab.pop(idx))))
+        if len(best.rows) > sqrt(len(lab.rows)):
+          best.rows.sort(key=lambda r: disty(lab,r))
+          add(rest, 
+            sub(best, 
+              best.rows[-1]))
+        cursor = idx  # resume from the shifted position next cycle
+        break
+    else:
+      break  # stop outer for loop if a full pass finds nothing
+  lab.rows.sort(key=lambda r: disty(lab,r))
+  return lab, fn
+
+def eg_acquire(file: str):
+  d= Data(csv(file))
+  W= wins(d)
+  Y= lambda r:disty(d,r)
+  for _ in range(20):
+    rows= acquire(d)[0].rows[:the.learn.check]
+    list(map(print,rows))
+      #print(W(sorted(acquire(d)[0].rows[:the.learn.check],key=Y)[0]))
+
 # --- Examples, data (tables) ---
 def eg_cols(): 
   """Test column extraction logic."""
@@ -269,10 +418,6 @@ def eg_cols():
   [print("x",o(c)) for c in cols.xs]
   [print("y",o(c)) for c in cols.ys]
   assert not cols.ys[0].heaven
-
-def eg_csv(file: str): 
-  """Test that CSV reader extracts data."""
-  assert len(list(csv(file))) > 10
 
 def eg_data(file: str):
   """Test that Data objects properly populate their columns."""
@@ -292,60 +437,7 @@ def eg_addsub(file: str):
   print(o(m2))
   assert all(abs(a-b) < 0.01 for a,b in zip(m1, m2))
 
-def like(c:Col, v:Any) -> float:
-  """Return how much a column likes a value."""
-  if type(c) == Sym:
-    return (c.has.get(v,0) + the.bayes.m/the.bayes.k) / (c.n + the.bayes.m)
-  sd = c.sd + 1e-32
-  return math.exp(-0.5*((v-c.mu)/sd)**2) / (sd * (2*math.pi)**.5)
-
-def likes(d:Data, r:row, nh:int=2, nall:int=100) -> float:
-  """Return how much a data likes a row."""
-  prior = (nh + the.bayes.k) / (nall + 2*the.bayes.k)
-  out   = math.log(prior)
-  for c in d.cols.x:
-    if (v := r[c.at]) != "?":
-      out += math.log(like(c, v) + 1e-32)
-  return out
-
-def acquireWithBayes(d:Data, best:Data, rest:Data, r:row) -> float:
-  """What is the delta between how best or rest is a row?"""
-  n = len(best.rows) + len(rest.rows)
-  return likes(rest, r, len(rest.rows), n) - likes(best, r, len(best.rows), n)
-
-def acquireeWithCentroid(d:Data, best:Data, rest:Data, r:row) -> float:
-  """What is the delta between how best or rest is a row?"""
-  return distx(d,r,mids(rest)) - distx(lab,r,mids(best))
-
-def acquire(d, score=acquireWithCentroid) -> Rows, callable:
-  """Using rows labelled so far, pick what row to label next."""
-  rows      = shuffle(d.rows[:])
-  m         = the.learn.warmStart
-  lab,unlab = clone(d,rows[:m]), rows[m:][:the.few]
-  lab.rows.sort(key=lambda r: disty(d,r))
-  n         = int(len(lab.rows)**.5)
-  best,rest = clone(d,lab.rows[:n]), clone(d,lab.rows[n:])
-  scorefn   = lambda r: score(lab,best,rest,r)
-  j = 0
-  for _ in range(the.learn.budget):
-    for _ in range(len(unlab)): # always look at |unlab| items
-      row = unlab[j]
-      if scorefn(row) < 0:
-        unlab.pop(j)
-        add(lab, 
-          add(best, row))
-        if len(best.rows) > int(len(lab.rows)**.5):
-          best.rows.sort(key=lambda r: disty(d,r))
-          add(rest, 
-            sub(best, best.rows[-1]))
-        j = j % len(unlab) if unlab else 0
-        break # break if good score found, so next time 
-      j = (j+1) % len(unlab)
-    else: # no good scores found, so exit
-      break
-  lab.rows.sort(key=lambda r: score(lab,best,rest,r))
-  return lab, scorefn
- 
+
 # ---- 4. Distance ----
 def minkowski(items: Iterable[Qty]) -> float:
   """Calculate generic Minkowski distance parameterised by `the.p`."""
@@ -382,6 +474,7 @@ def eg_disty(file: str):
   d = Data(csv(file))
   for r in sorted(d.rows, key=lambda r: disty(d, r))[::30]: 
     print(*r, ":", round(disty(d, r), 2), sep="\t")
+
 
 # ---- 5. Stats ----
 def same(xs: list, ys: list, eps: float) -> bool:
@@ -406,16 +499,34 @@ def bestRanks(d: dict) -> dict:
     else: break
   return best
 
-# --- Examples, stats ---
-def eg_same(): 
-  """Test statistical equivalence test."""
-  assert same([1,2,3], [1,2,3], 0.1)
+def Confuse() -> dict: 
+  """Initialize an empty dictionary for lazy confusion matrix tracking."""
+  return {}
 
-def eg_ranks():
-  """Test grouping of generated statistical ranges."""
-  d = {f"t{j}": [(10 if j<=5 else 20)*(-log(1-rand()))**(1/(2 if j<=5 else 1)) 
-                 for _ in range(50)] for j in range(1, 21)}
-  [print(f"  {k:<5} median: {o(mid(c))}") for k, c in bestRanks(d).items()]
+def confuse(cf: dict, want: Any, got: Any) -> Any:
+  """Track a prediction. O(1) update time via lazy tracking."""
+  cf[want] = cf.get(want) or {}
+  cf[want][got] = cf[want].get(got, 0) + 1
+  return got
+
+# In Section 5: Stats
+def confused(cf: dict ) -> list[S]:
+  """Confusion stats. label on RHS for alignment. All metrics as int %."""
+  klasses = sorted(set(cf.keys()).union({g for w in cf.values() for g in w.keys()}))
+  total = sum(cf[w][g] for w in cf for g in cf[w])
+  p = lambda y, z: int(100 * y / (z or 1e-32)) 
+  out = []
+  for c in klasses:
+    tp = cf.get(c, {}).get(c, 0)
+    fn = sum(cf.get(c, {}).values()) - tp
+    fp = sum(cf.get(w, {}).get(c, 0) for w in cf if w != c)
+    tn = total - tp - fn - fp
+    pd, pr, sp = p(tp, tp+fn), p(tp, fp+tp), p(tn, tn+fp)
+    out.append(S(tp=tp, fn=fn, fp=fp, tn=tn, pd=pd, pr=pr, 
+                 f1=int(2*pd*pr/(pd+pr+1e-32)), 
+                 g=int(2*pd*sp/(pd+sp+1e-32)), 
+                 acc=p(tp+tn, total), label="  " +c)) # added per-class acc
+  return out
 
 # ---- 6. Trees ----
 class Tree:
@@ -444,8 +555,10 @@ def treeGrow(d: Data, rs: Rows) -> Tree:
   """Recursively grow a decision tree to minimize Y-distance variance."""
   t = Tree(d, rs)
   if len(rs) >= 2 * the.learn.leaf:
-    splits = (_treeSplit(d, c, cut, rs) 
-              for c in t.d.cols.xs for cut in _treeCuts(c, rs))
+    splits = (
+      _treeSplit(d, c, cut, rs) 
+      for c in t.d.cols.xs for cut in _treeCuts(c, rs)
+    )
     if valid := [s for s in splits if min(len(s[3]), len(s[4])) >= the.learn.leaf]:
       _, t.col, t.cut, left, right = min(valid, key=lambda x: x[0])
       t.left, t.right = treeGrow(d, left), treeGrow(d, right)
@@ -474,7 +587,7 @@ def treeShow(t: Tree) -> None:
     p = f"{col.txt} {op} {o(cut)}" if col else ""
     if lvl > 0: p = "|   " * (lvl - 1) + p
     g = {c.txt: mid(c) for c in t1.d.cols.ys}
-    print(f"{p:<{the.show.Show}},{o(mid(t1.ynum)):>4} ,({t1.ynum.n:3}), {o(g)}")
+    print(f"{p:<{the.show.show}},{o(mid(t1.ynum)):>4} ,({t1.ynum.n:3}), {o(g)}")
 
 def treePlan(t: Tree, here: Tree) -> Iterable[tuple]:
   """Yield plans (variable changes) to improve outcomes from current leaf."""
@@ -522,6 +635,7 @@ def eg_test(file: str):
     top = min(guess[:the.learn.check], key=lambda r: disty(d_train, r))
     add(outs, win(top))
   print(int(mid(outs)))
+
 
 # ---- 7. Clustering ----
 def kmeans(d: Data, rs: Rows = None, k: int = 10, n: int = 10, 
@@ -547,8 +661,10 @@ def kpp(d: Data, rs: Rows = None, k: int = 10, few: int = 256) -> Rows:
 def half(d: Data, rs: Rows, few: int = 20) -> tuple:
   """Divide rows into two halves based on distance to two extreme points."""
   t = sample(rs, min(few, len(rs)))
-  gap, east, west = max(((distx(d, r1, r2), r1, r2) for r1 in t for r2 in t),
-                        key=lambda z: z[0])
+  gap, east, west = max(
+    ((distx(d, r1, r2), r1, r2) for r1 in t for r2 in t),
+    key=lambda z: z[0]
+  )
   proj = lambda r: (distx(d, r, east)**2 + gap**2 - distx(d, r, west)**2) / (2*gap+1e-32)
   rs = sorted(rs, key=proj)
   n = len(rs) // 2
@@ -588,10 +704,8 @@ def eg_cluster(file: str):
   """Run clustering benchmark table comparing baseline, kmeans, and rhalf."""
   d = Data(csv(file)); k, near = 16, 1
   all_y = adds((disty(d, r) for r in d.rows), Num())
-  print(f"{'Algorithm':<10} | {'T_Build':>7} | {'T_Apply':>7} | "
-        f"{'Err':>7} (small: {.35*spread(all_y):.2f})")
-  print("-" * 43)
   
+  results = []
   B  = lambda d1: [d1]
   S1 = lambda d1: [clone(d, sample(d.rows, 32))]
   RH = lambda d1: rhalf(d1, k=k)
@@ -602,7 +716,14 @@ def eg_cluster(file: str):
                         ("rhalf", RH, False), ("kmeans", KM, False),
                         ("kpp", KP, False), ("rhalf f", RH, True),
                         ("kmeans f", KM, True), ("kpp f", KP, True)]:
-    print(f"{txt:<10} | ", *_cluster(d, fn, near, fast=fast))
+    
+    t_build, t_apply, err = _cluster(d, fn, near, fast=fast)
+    results.append(dict(Algorithm=txt, T_Build=t_build, 
+                          T_Apply=t_apply, Err=err))
+    
+  print(f"Dataset small error threshold: {.35*spread(all_y):.2f}\n")
+  table(results, w=12)
+
 
 # ---- 8. Start Up ----
 the = S()
