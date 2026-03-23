@@ -318,7 +318,7 @@ def wins(d: Data) -> Callable:
   """Return a function that scores rows based on distance to heaven."""
   ds = [disty(d, r) for r in d.rows]
   lo, med = min(ds), sorted(ds)[len(ds)//2]
-  return lambda r: int(100 * (1 - ((disty(d, r) - lo) / (med - lo + 1e-32))))
+  return lambda r: int(100*(1 - ((disty(d,r)-lo) / (med-lo+1e-32))))
 
 def ready(file: Any) -> tuple[Data, Data, Rows]:
   """Load, safely shuffle, and split data into train/test sets."""
@@ -377,8 +377,8 @@ def acquire(d, score=acquireWithBayes, label=lambda x:x) -> (Rows,callable):
   rows = d.rows[:]
   shuffle(rows)
   lab,unlab = clone(d,rows[:the.learn.start]), rows[the.learn.start:][:the.few]
-  lab.rows.sort(key=lambda r: disty(d,r))
-  n         = sqrt(len(lab.rows))
+  lab.rows.sort(key=lambda r: disty(d, label(r)))
+  n = sqrt(len(lab.rows))
   best,rest = clone(d,lab.rows[:int(n)]), clone(d,lab.rows[int(n):])
   cursor = 0
   fn = lambda r: score(lab, best, rest, r)
@@ -406,9 +406,11 @@ def eg_acquire(file: str):
   d= Data(csv(file))
   W= wins(d)
   Y= lambda r:disty(d,r)
-  for _ in range(20):
-    rows= acquire(d)[0].rows[:the.learn.check]
-    list(map(print,rows))
+  d2,model = acquire(d)
+  [print(">", r, W(r)) for r in sorted(d2.rows, key=model)[-10:]]
+  # for _ in range(1):
+  #   row = sorted(acquire(d)[0].rows[:the.learn.check],key=Y)[0]
+  #   print("'''''''''''''''''''''''''''''''''''''''''''''''''''''row)
       #print(W(sorted(acquire(d)[0].rows[:the.learn.check],key=Y)[0]))
 
 # --- Examples, data (tables) ---
