@@ -90,7 +90,8 @@ type Datas = list[Data]
 def o(x: Any) -> str:
   """Recursively format objects. Sorts dicts for stable table columns."""
   if isinstance(x, float): return f"{x:.{the.show.decimals}f}"
-  if isinstance(x, dict):  return "{"+", ".join(f"{k}={o(v)}" for k,v in sorted(x.items()))+"}"
+  if isinstance(x, dict):  
+    return "{"+", ".join(f"{k}={o(v)}" for k,v in sorted(x.items()))+"}"
   if isinstance(x, list):  return "{"+", ".join(map(o, x))+"}"
   if isinstance(x, S):     return "S" + o(x.__dict__)
   if hasattr(x, "__dict__"): return x.__class__.__name__ + o(x.__dict__)
@@ -237,7 +238,9 @@ def spread(c: Col) -> float:
 def norm(c: Num, v: Qty) -> float:
   """Normalize numeric values using a logistic function."""
   if v == "?": return v
-  return 0.5 if c.sd==0 else 1/(1 + exp(-1.7*(v - c.mu) / (c.sd+1e-32)))
+  z = (v - c.mu) / (c.sd+1e-32)
+  z = max(c.mu - 3*c.sd, min(c.mu + 3*c.sd, z))
+  return 1/(1 + exp(-1.7*z))
 
 def pick(it: Any) -> Any:
   """Randomly sample a value from a distribution."""
@@ -323,9 +326,9 @@ def wins(d: Data) -> Callable:
 def ready(file: Any) -> tuple[Data, Data, Rows]:
   """Load, safely shuffle, and split data into train/test sets."""
   d = file if Data == type(file) else Data(csv(file))
-  rs = sample(d.rows, len(d.rows)) 
-  n = len(rs) // 2
-  return d, clone(d, rs[:n][:the.learn.budget]), rs[n:]
+  random.shuffle(d.rows)
+  n = len(d.rows) // 2
+  return d, clone(d, d.rows[:n][:the.learn.budget]), d.rows[n:]
 
 # ---- Bayes ----
 def like(c: Col, v: Any, prior) -> float:
@@ -336,13 +339,13 @@ def like(c: Col, v: Any, prior) -> float:
   return (1/sqrt(2*pi*sd*sd)) * exp(-((v-c.mu)**2) / (2*sd*sd))
 
 def likes(d: Data, r: Row, n_rows: int, n_klasses: int) -> float:
-  "Return log likelihood of row r given data d."
+  """Return log likelihood of row r given data d."""
   prior = (len(d.rows)+the.bayes.m) / (n_rows + the.bayes.m * n_klasses)
   ls    = [like(c,v,prior) for c in d.cols.xs if (v:=r[c.at])!="?"]
   return log(prior) + sum(log(v) for v in ls if v>0)
 
 def classify(src: Iterable, wait: int = 10) -> dict:
-  "Test then train: classify row using existing models before updating them."
+  """Test then train: classify row using existing models before updating them."""
   src = iter(src)
   h, cf, all = {}, Confuse(), Data([next(src)])
   for n, r in enumerate(src):
@@ -364,13 +367,13 @@ def eg_bayes():
   table(confused(cf), w=7)
    
 def acquireWithBayes(d: Data, best: Data, rest: Data, r: Row) -> float:
-  """What is the delta between how best or rest is a row?"""
+  """Negative means more likely best. Sorting ascending = most likely 1st."""
   n = len(best.rows) + len(rest.rows)
   return likes(rest, r, n, 2) - likes(best, r, n, 2)
 
 def acquireWithCentroid(d: Data, best: Data, rest: Data, r: Row) -> float:
-  """What is the delta between how best or rest is a row?"""
-  return distx(d,r,mids(rest)) - distx(d,r,mids(best))
+  """Negative means closer to best. Sorting ascending = closest first."""
+  return distx(d, r, mids(best)) - distx(d, r, mids(rest))
 
 def acquire(d, score=acquireWithBayes, label=lambda x:x) -> (Rows,callable):
   """Using rows labelled so far, pick what unlabelled to label next."""
@@ -403,15 +406,28 @@ def acquire(d, score=acquireWithBayes, label=lambda x:x) -> (Rows,callable):
   return lab, fn
 
 def eg_acquire(file: str):
-  d= Data(csv(file))
-  W= wins(d)
-  Y= lambda r:disty(d,r)
-  d2,model = acquire(d)
-  [print(">", r, W(r)) for r in sorted(d2.rows, key=model)[-10:]]
-  # for _ in range(1):
-  #   row = sorted(acquire(d)[0].rows[:the.learn.check],key=Y)[0]
-  #   print("'''''''''''''''''''''''''''''''''''''''''''''''''''''row)
-      #print(W(sorted(acquire(d)[0].rows[:the.learn.check],key=Y)[0]))
+  d = Data(csv(file))
+  W = wins(d)
+  Y = lambda r:disty(d,r)
+  out = {}
+  for _ in range(20):
+    random.shuffle(d.rows)
+    n       = len(d.rows)//2
+    test    = d.rows[n:] 
+    train   = d.rows[:n][:the.few]
+    any     = train[:the.learn.budget]
+    lab1    = train[:the.learn.budget]
+    lab2, _ = acquire(clone(d,train))
+    lab3, _ = acquire(clone(d,train),acquireWithCentroid)
+    #for how,lab in (("rand",lab1)):
+    for how,lab in (("rand",lab1),("bayes",lab2.rows),("near",lab3.rows)):
+       d2    = clone(d,lab)
+       tree  = treeGrow(d2, d2.rows)
+       guess = sorted(test, key=lambda r: mid(treeLeaf(tree,r).ynum))
+       out[how] = out.get(how) or Num()
+       add(out[how], W(sorted(guess[:the.learn.check],key=Y)[0]))
+  for how,num in out.items(): print(int(mid(num)),how, end=" ")
+  print(" budget ",the.learn.budget)
 
 # --- Examples, data (tables) ---
 def eg_cols(): 
