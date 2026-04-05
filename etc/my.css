@@ -1,0 +1,84 @@
+p {text-align: right}
+
+/* my.css - Ultra-High Density / Zero-Air Style */
+
+body {
+  font-family: "Inter", sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #111;
+  background: #fff; /* Pure white background throughout */
+}
+
+/* h1 - Minimalist and flat */
+h1 {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 1.4rem;
+  font-weight: 800;
+  text-transform: lowercase;
+  margin: 1rem 0 3rem 0;
+  padding-bottom: 5px;
+  border-bottom: 2px solid #111;
+  display: inline-block;
+}
+
+/* h2 - Heavy overlines for section anchors */
+h2 {
+  border-top: 3px solid #111;
+  padding-top: 8px;
+  margin-top: 5rem;
+  font-family: "JetBrains Mono", monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 1.1rem;
+  clear: both;
+}
+
+/* Right-aligned prose column */
+.content p, .content li, .content blockquote {
+  text-align: right;
+  color: #444;
+  padding-right: 30px;
+  margin-bottom: 1.2rem;
+}
+
+/* The Code Column - No background color, just a clean split */
+.code {
+  xbackground: #fff !important; 
+  border-left: 1px solid #ddd;
+  padding-left: 15px !important;
+}
+
+.body {
+  border-right: 1px solid #ddd;
+}
+
+/* Logic Density - Negative letter spacing (The "ZIP" Squeeze) */
+pre, code {
+  font-family: "JetBrains Mono", monospace !important;
+  font-size: 13px !important;
+  line-height: 1.35 !important;
+  /* Aggressive horizontal compression */
+  letter-spacing: -0.05em !important; 
+  font-stretch: condensed;
+  -webkit-font-smoothing: antialiased;
+  tab-size: 2;
+  font-variant-ligatures: none;
+}
+
+/* High-Contrast Syntax (No pastels) */
+.keyword { color: #000; font-weight: 900; } /* Bold black keywords */
+.comment { color: #888; font-style: italic; }
+.string  { color: #222; border-bottom: 1px dotted #ccc; }
+.number  { color: #000; font-weight: bold; }
+
+/* Tighten vertical spacing between code blocks */
+.section {
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+/* Scrollbar styling for density */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-thumb { background: #eee; }
+

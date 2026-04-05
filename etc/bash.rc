@@ -26,7 +26,7 @@ bind '"\e[B": history-search-forward'
 PS1='🌙 $(basename $(dirname $PWD))/$(basename $PWD) $ '
 
 # ---- aliases -------------------------------------------------------------
-alias vi='nvim -u $I/init.lua -p'
+alias vi='nvim -u $I/etc/init.lua -p'
 alias ls='ls -G'
 alias ll='ls -lh'
 alias la='ls -lha'

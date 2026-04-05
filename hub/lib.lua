@@ -1,16 +1,19 @@
 -- lib.lua: batteries for Lua
 -- (c) 2026 Tim Menzies timm@ieee.org, MIT license
--- vim: set et sw=2 tw=90 :
 
 local lib = {}
 local floor,min,abs,log = math.floor,math.min,math.abs,math.log
 local rand = math.random
 
--- oo --
+-- ## oo
+-- Basic object orientation helpers.
+
 function lib.new(kl,obj) 
   kl.__index=kl; return setmetatable(obj,kl) end
 
--- tables --
+-- ## tables
+-- Table manipulation and iteration utilities.
+
 function lib.push(t,x) 
   t[1+#t]=x; return x end
 
@@ -32,22 +35,24 @@ function lib.kv(t,fk,fv,    u)
 function lib.cat(t) 
   return "{"..table.concat(t,", ").."}" end
 
-function lib.slice(t,lo,hi,  u)
+function lib.slice(t,lo,hi,    u)
   u={}; for i=(lo or 1),min(hi or #t,#t) do u[1+#u]=t[i] end; return u end
 
-function lib.shuffle(t,     j)
+function lib.shuffle(t,    j)
   for i=#t,2,-1 do j=rand(i); t[i],t[j]=t[j],t[i] end; return t end
 
 function lib.many(t,n) 
   return lib.slice(lib.shuffle(t),1,n) end
 
--- strings --
+-- ## strings
+-- String formatting and conversion.
+
 lib.fmt = string.format
 
 function lib.trim(s) 
   return s:match"^%s*(.-)%s*$" end
 
-function lib.rat(x,     u)
+function lib.rat(x,    u)
   if math.type(x)=="float" then return lib.fmt("%.2f",x) end
   if type(x)~="table"      then return tostring(x) end
   if #x>0 then return lib.cat(lib.map(x,lib.rat)) end
@@ -57,20 +62,24 @@ function lib.rat(x,     u)
 function lib.oo(x) 
   print(lib.rat(x)); return x end
 
--- io --
+-- ## io
+-- Input/Output and file handling.
+
 function lib.thing(s)
   return s=="true" or 
     (s~="false" and (math.tointeger(s) or tonumber(s) or s)) end
 
-function lib.things(file,     src)
+function lib.things(file,    src)
   src=assert(io.open(file))
-  return function(     s,t)
+  return function(    s,t)
     s=src:read(); if s then
       t={}; for x in s:gmatch"[^,]+" do 
         lib.push(t, lib.thing(lib.trim(x))) end; return t 
     end end end
 
--- math --
+-- ## math
+-- Mathematical and statistical functions.
+
 function lib.bisect(t, x,    lo, hi, mid)
   lo, hi = 1, #t
   while lo <= hi do
@@ -82,3 +91,4 @@ function lib.weibull(k, lambda)
   return lambda * (-log(1 - rand()))^(1/k) end
 
 return lib
+

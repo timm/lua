@@ -17,15 +17,26 @@ RESET := \033[0m
 
 sh: ## start up my own IDE
 	@reset
-	@printf "$(BLUE)%b$(RESET)\n" "$$(figlet -W -f larry3D lua)"
+	@printf "$(BLUE)%b$(RESET)" "$$(figlet -W -f larry3D lua)"
+	@printf "\nShoot for the moon. Even if you miss, you’ll land among the stars\n— Les Brown\n\n" 
 	@I=$I bash --init-file $I/etc/bash.rc -i
 
-~/tmp/%.html: %.lua $I/etc/top.html ## lua to pdf
-	@pycco -d $(dir $@) $<
-	@echo 'p {text-align: right}' >> $(dir $@)pycco.css
+OUT = ~/tmp/html
+LUA = $(wildcard *.lua)
+DOCS = $(LUA:%.lua=$(OUT)/%.html)
+
+docs: $(OUT) $(DOCS)
+
+$(OUT):
+	@mkdir -p $(OUT)
+
+$(OUT)/%.html: %.lua $I/etc/top.html
+	@echo "Generating doco for $<"
+	@pycco -d $(OUT) $<
+	@cat $I/etc/my.css >> $(OUT)/pycco.css
 	@gawk -v x="$$(cat $I/etc/top.html)" \
-    'BEGIN {FS="<h1>"; RS="_jqz9v"} \
-           {print $$1 x "<h1>" $$2}' $@ > .$<
+		'BEGIN {FS="<h1>"; RS="_jqz9v"} \
+		       {print $$1 x $$2}' $@ > .$<
 	@mv .$< $@
 
 Font ?=5
@@ -47,6 +58,6 @@ check:
 CSVS=ls -r ~/gits/moot/optimize/*/*.csv | xargs -P 20 -I {} sh -c 
 
 ~/tmp/luatest.log :
-	@$(CSVS) 'lua tree.lua  --test {} 2>&1' | tee $@
+	@$(CSVS) 'lua ezr.lua --test {} 2>&1' | tee $@
 	cut -d \  -f 1 $@ | sort -n | fmt -65
 

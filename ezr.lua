@@ -1,7 +1,7 @@
 #!/usr/bin/env lua
 -- <!-- vim: set et sw=2 tw=90 : -->
 local the,help = {}, [[
-tree.lua : explainable multi-objective optimiization
+ezr.lua : explainable multi-objective optimiization
 (c) 2026, Tim Menzies <timm@ieee.org>, MIT license
 
   -B Budget=50     initial building budget
@@ -222,30 +222,34 @@ function bestRanks(dict,    items, k0, lst0, best)
   return best end
 
 -- eg -----------------------------------------------------------------
-local function run(f,arg) math.randomseed(the.seed); f(arg) end
 local eg = {}
 
-function eg.h(_) print(help) end
+eg["-h"]= function (_) print(help) end
 
-function eg.all(f,     a)
-  a={}; for k,_ in pairs(eg) do if k ~= "all" then a[1+#a]=k end end
-  for _,k in pairs(sort(a)) do print("\n"..k); run(eg[k],f) end end
+eg["--the"]= function (_) lib.oo(the) end
 
-function eg.csv(f,     n)
+eg["--all"] = function (arg,     a)
+  a={}; for k in pairs(eg) do if k ~= "--all" then a[1+#a]=k end end
+  for _,k in pairs(sort(a)) do 
+    print("\n"..k)
+    math.randomseed(the.seed)
+    eg[k](arg) end end 
+
+eg["--csv"] = function (f,     n)
   n=0; for row in things(f) do
     if n%30==0 then print(cat(map(row,rat))) end; n=n+1 end end
 
-function eg.data(f,     d)
+eg["--data"] = function (f,     d)
   d = Data(f)
   for _, c in ipairs(d.cols.y) do
     print(string.format("%s: n=%d mid=%s spread=%s",
           c.txt, c.n, rat(c:mid()), rat(c:spread()))) end end
 
-function eg.tree(f,     d, sub)
+eg["--tree"] = function (f,     d, sub)
   d = Data(f); sub = many(d.rows, the.Budget); d = d:clone(sub)
   Tree(function(r) return d:disty(r) end):build(d, d.rows):show() end
 
-function eg.ranks(    dict)
+eg["--ranks"] = function (    dict)
   dict = {}
   for i = 1, 20 do
     local name = "t" .. i; dict[name] = {}
@@ -255,7 +259,7 @@ function eg.ranks(    dict)
   for k, num in pairs(bestRanks(dict)) do
     print(string.format("  %-5s median: %s", k, rat(num:mid()))) end end
 
-function eg.test(f)
+eg["--test"] = function (f)
   local d, outs, win, n, test, d2, t, top
   d = Data(f); outs = Num("win"); win = wins(d)
   for _ = 1, 20 do
@@ -273,17 +277,20 @@ function eg.test(f)
 
 -- main ---------------------------------------------------------------
 
-local function main(     k, i, v)
-  i = 1; while i <= #arg do
-    k = arg[i]:match"^%-%-?(.+)"; i = i + 1
-    if k then
+local function main(     k,i,v)
+  i=1
+  while i <= #arg do
+    k,v = arg[i], arg[i+1]
+    i = i + 1
+    if eg[k] then
       math.randomseed(the.seed)
-      if eg[k] then
-        v = arg[i] and not arg[i]:match"^%-" and arg[i] or nil
-        if v then i = i + 1 end; eg[k](v)
-      elseif the[k]~=nil then the[k]=thing(arg[i]); i=i+1 end end end end
+      eg[k](v and thing(v) or nil)
+      if not eg[v] then i=i+1 end
+    else 
+      for k1 in pairs(the) do
+        if k == "-"..k1:sub(1,1) then
+          the[k1] = thing(v) end end end end end 
 
 for k,v in help:gmatch("([%w_]+)%s*=%s*([^%s]+)") do the[k] = thing(v) end
-
 math.randomseed(the.seed)
-if arg[0]:match("tree%.lua$") then main() end
+if arg[0]:match("ezr%.lua$") then main() end
