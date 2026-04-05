@@ -1,15 +1,5 @@
 #!/usr/bin/env lua
--- tree.lua: decision tree for multi-objective optimization
--- (c) 2026 Tim Menzies timm@ieee.org, MIT license
 -- vim: set et sw=2 tw=90 :
-
-local lib = require"lib"
-local new,push,sort,map,sum,kv = lib.new,lib.push,lib.sort,lib.map,lib.sum,lib.kv
-local slice,many,shuffle   = lib.slice,lib.many,lib.shuffle
-local cat,trim,rat         = lib.cat,lib.trim,lib.rat
-local thing,things,bisect  = lib.thing,lib.things,lib.bisect
-local weibull              = lib.weibull
-
 local the,help = {}, [[   
 tree.lua : explainable multi-objective optimiization
 (c) 2026, Tim Menzies <timm@ieee.org>, MIT license
@@ -26,23 +16,38 @@ tree.lua : explainable multi-objective optimiization
   -h               show help
 ]]
 
-local floor,max,min,abs,log,exp = math.floor,math.max,math.min,math.abs,math.log,math.exp
-local rand,BIG = math.random, 1E32
+local lib = require"lib"
+local new,push,sort        = lib.new,lib.push,lib.sort
+local map,sum,kv           = lib.map,lib.sum,lib.kv
+local slice,many,shuffle   = lib.slice,lib.many,lib.shuffle
+local cat,trim,rat         = lib.cat,lib.trim,lib.rat
+local thing,things,bisect  = lib.thing,lib.things,lib.bisect
+local weibull              = lib.weibull
+
+local floor,max,min = math.floor,math.max,math.min
+local abs,log,exp   = math.abs,math.log,math.exp
+local rand,BIG      = math.random, 1E32
 
 local NUM, SYM, COLS, DATA, TREE = {}, {}, {}, {}, {}
 local Num, Sym, Data, Tree, Cols
 
--- structs ------------------------------------------------------------------------------
-function Tree(score) return new(TREE, {score=score}) end
-function Sym(s, at)  return new(SYM, {txt=s or "", at=at or 0, has={}, n=0}) end
-function Num(s, at)  return new(NUM, {txt=s or "", at=at or 0, n=0, mu=0, m2=0,
-                                     goal=s and s:match"-$" and 0 or 1}) end
+-- structs ------------------------------------------------------------
+function Tree(score) 
+  return new(TREE, {score=score}) end
+
+function Sym(s, at)  
+  return new(SYM, {txt=s or "", at=at or 0, has={}, n=0}) end
+
+function Num(s, at)  
+  return new(NUM, {txt=s or "", at=at or 0, n=0, mu=0, m2=0,
+                   goal=s and s:match"-$" and 0 or 1}) end
 
 function Cols(names,    x, y, all, col)
   x, y, all = {}, {}, {}
   for at, s in ipairs(names) do
     col = push(all, (s:match"^[A-Z]" and Num or Sym)(s, at))
-    if not s:match"X$" then push(s:match"[%+%-!]$" and y or x, col) end end
+    if not s:match"X$" then 
+      push(s:match"[%+%-!]$" and y or x, col) end end
   return new(COLS, {x=x, y=y, all=all, names=names}) end
 
 function Data(src,     d) 
@@ -51,9 +56,10 @@ function Data(src,     d)
   else for _, row in ipairs(src or {}) do add(d,row) end end
   return d end 
 
-function DATA.clone(i,rows) return adds(rows or {}, Data({i.cols.names})) end
+function DATA.clone(i,rows) 
+  return adds(rows or {}, Data({i.cols.names})) end
 
--- update -------------------------------------------------------------------------------
+-- update -------------------------------------------------------------
 function add(i,v,w) if v~="?" then i:add(v,w or 1) end; return v end
 function sub(i,v)   return i:add(v,-1) end
 
@@ -76,7 +82,7 @@ function DATA.add(i,row,w)
       for j,r in ipairs(i.rows) do
         if r==row then table.remove(i.rows,j); break end end end end end
 
--- query --------------------------------------------------------------------------------
+-- query --------------------------------------------------------------
 function NUM.mid(i)    return i.mu end
 function SYM.mid(i,     most,mode)
   most = -1
@@ -89,7 +95,8 @@ function DATA.mid(i)
 function NUM.spread(i)
   return i.n > 1 and (max(0,i.m2)/(i.n - 1))^0.5 or 0 end
 function SYM.spread(i)
-  return -sum(i.has, function(_, v) return (v/i.n) * log(v/i.n, 2) end) end
+  return -sum(i.has, 
+              function(_, v) return (v/i.n) * log(v/i.n, 2) end) end
 
 function NUM.norm(i,v,     sd)
   if v=="?" then return v end
@@ -111,9 +118,9 @@ function wins(d,     ds, lo, med)
   ds = sort(map(d.rows, function(r) return d:disty(r) end))
   lo, med = ds[1], ds[floor(#ds/2)+1]
   return function(r)
-    return floor(100*(1 - ((d:disty(r) - lo) / (med - lo + 1e-32)))) end end
+    return floor(100*(1 - ((d:disty(r)-lo) / (med-lo+1e-32)))) end end
 
--- tree ---------------------------------------------------------------------------------
+-- tree ---------------------------------------------------------------
 function TREE.build(i, d, rows,     mid, best, bestW, w)
   mid = d:clone(rows):mid()
   i.y = adds(map(rows, function(r) return i.score(r) end))
@@ -158,7 +165,7 @@ function TREE.show(i)
     io.write(string.format("%-"..the.Show.."s ,%4s ,(%3d),  %s\n",
       s, rat(n.y:mid()), n.y.n, rat(n.mids))) end) end
 
--- splits -------------------------------------------------------------------------------
+-- splits -------------------------------------------------------------
 local function split(col, rows, score, cut, test,
                      lhs, rhs, L, R, go)
   lhs, rhs, L, R = Num(), Num(), {}, {}
@@ -187,7 +194,7 @@ function SYM.splits(i, rows, score,     seen, out, sp)
       if sp then push(out, sp) end
     end end; return out end
 
--- stats --------------------------------------------------------------------------------
+-- stats --------------------------------------------------------------
 local function same(xs, ys, eps,    n, m, gt, lt, ks, f)
   xs, ys = sort(xs), sort(ys); n, m = #xs, #ys
   if abs(xs[n//2+1] - ys[m//2+1]) <= eps then return true end
@@ -214,15 +221,15 @@ function bestRanks(dict,    items, k0, lst0, best)
     else break end end
   return best end
 
--- eg -----------------------------------------------------------------------------------
+-- eg -----------------------------------------------------------------
 local function run(f,arg) math.randomseed(the.seed); f(arg) end
 local eg = {}
 
 function eg.h(_) print(help) end
 
-function eg.all(f)
-  for k,_ in pairs(eg) do if k ~= "all" then a[1+#a]=k end end 
-  for _,k in sorted(a) do run(eg[k],f) end end
+function eg.all(f,     a)
+  a={}; for k,_ in pairs(eg) do if k ~= "all" then a[1+#a]=k end end 
+  for _,k in pairs(sort(a)) do print("\n"..k); run(eg[k],f) end end
 
 function eg.csv(f,     n)
   n=0; for row in things(f) do
@@ -255,14 +262,15 @@ function eg.test(f,     d, outs, win, n, test, d2, t, top)
     test = slice(d.rows, n+1)
     d2 = d:clone(slice(d.rows, 1, min(n, the.Budget)))
     t = Tree(function(r) return d2:disty(r) end):build(d2, d2.rows)
-    sort(test, function(a,b) return t:leaf(a).y:mid() < t:leaf(b).y:mid() end)
+    sort(test, function(a,b) 
+                  return t:leaf(a).y:mid() < t:leaf(b).y:mid() end)
     top = sort(slice(test, 1, the.Check),
                function(a,b) return d2:disty(a) < d2:disty(b) end)
     add(outs, win(top[1]))
   end
   print(rat(floor(outs:mid()))) end
 
--- main ---------------------------------------------------------------------------------
+-- main ---------------------------------------------------------------
 
 local function main(     k, i, v)
   i = 1; while i <= #arg do
@@ -272,7 +280,7 @@ local function main(     k, i, v)
       if eg[k] then
         v = arg[i] and not arg[i]:match"^%-" and arg[i] or nil
         if v then i = i + 1 end; eg[k](v)
-      elseif the[k]~=nil then the[k] = thing(arg[i]); i = i + 1 end end end end
+      elseif the[k]~=nil then the[k]=thing(arg[i]); i=i+1 end end end end
 
 for k,v in help:gmatch("([%w_]+)%s*=%s*([^%s]+)") do the[k] = thing(v) end
 
