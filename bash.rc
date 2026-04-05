@@ -1,0 +1,50 @@
+# ---- env -----------------------------------------------------------------
+export EDITOR=nvim
+export HISTSIZE=100000
+export HISTFILESIZE=200000
+export HISTCONTROL=ignoredups:erasedups
+export HISTTIMEFORMAT="%F %T "
+export LESS="-FRX"
+export CDPATH=.:~:~/git
+
+# ---- history -------------------------------------------------------------
+shopt -s histappend
+PROMPT_COMMAND="history -a"
+
+# ---- shell opts ----------------------------------------------------------
+set -o vi
+shopt -s autocd
+shopt -s cdspell
+
+# ---- completion ----------------------------------------------------------
+bind "set completion-ignore-case on"
+bind "set show-all-if-ambiguous on"
+bind '"\e[A": history-search-backward'
+bind '"\e[B": history-search-forward'
+
+# ---- prompt --------------------------------------------------------------
+PS1='🌙 $(basename $(dirname $PWD))/$(basename $PWD) $ '
+
+# ---- aliases -------------------------------------------------------------
+alias vi='nvim -u init.lua -p'
+alias ls='ls -G'
+alias ll='ls -lh'
+alias la='ls -lha'
+alias ..='cd ..'
+alias ...='cd ../..'
+alias please='sudo $(history -p \!\!)'
+
+# ---- functions -----------------------------------------------------------
+mkcd() { mkdir -p "$1" && cd "$1"; }
+b()    { cd $(printf '../%.0s' $(seq 1 ${1:-1})); }
+h()    { history | grep "$1"; }
+path() { echo "$PATH" | tr ':' '\n'; }
+
+ex() {
+  case $1 in
+    *.tar.bz2) tar xjf $1 ;;  *.tar.gz)  tar xzf $1 ;;
+    *.tar.xz)  tar xJf $1 ;;  *.zip)     unzip $1   ;;
+    *.gz)      gunzip $1  ;;  *.7z)      7z x $1    ;;
+    *) echo "dunno: $1"   ;;
+  esac
+}
