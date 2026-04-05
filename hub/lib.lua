@@ -2,7 +2,7 @@
 -- (c) 2026 Tim Menzies timm@ieee.org, MIT license
 
 local lib = {}
-local floor,min,abs,log = math.floor,math.min,math.abs,math.log
+local floor,min,max,abs,log = math.floor,math.min,math.max,math.abs,math.log
 local rand = math.random
 
 -- ## oo
@@ -10,6 +10,12 @@ local rand = math.random
 
 function lib.new(kl,obj) 
   kl.__index=kl; return setmetatable(obj,kl) end
+
+-- ## Maths
+-- Math routines.
+
+function lib.crop(x,lo,hi)
+  return max(lo,min(hi,x)) end
 
 -- ## tables
 -- Table manipulation and iteration utilities.

@@ -1,41 +1,44 @@
 local s = require "the"
 local the, l, NUM, SYM, COLS, DATA = s.the, s.l, s.NUM, s.SYM, s.COLS, s.DATA
 local abs, exp, log, max = math.abs, math.exp, math.log, math.max
+local Cols = require("types").Cols
 
 -- ## Update
 -- add/sub/adds: The primary interface for state changes.
 -- Centroids (mid) are computed once, cached, and reset on any update.
 
 local function add(i, v, w)
-  if v ~= "?" then i:add(v, w or 1) end; return v end
+  if v ~= "?" then i.n = i.n + 1; i:_add(v, w or 1) end; return v end
 
 local function sub(i, v)
-  return i:add(v, -1) end
+  return i:_add(v, -1) end
 
 local function adds(vs,    num)
   num = num or require("types").Num()
   for _, v in ipairs(vs or {}) do add(num, v) end; return num end
 
-function NUM.add(i, v, w,    err)
-  w = w or 1; i.n = i.n + w
+function NUM._add(i, v, w,    err)
   if w < 0 and i.n <= 2 then i.n, i.mu, i.m2 = 0, 0, 0
   elseif i.n > 0 then
-    err = v - i.mu; i.mu = i.mu + w * err / i.n; i.m2 = i.m2 + w * err * (v - i.mu) end 
-end
+    err = v - i.mu
+    i.mu = i.mu + w * err / i.n
+    i.m2 = i.m2 + w * err * (v - i.mu) end end
 
-function SYM.add(i, v, w)
-  w = w or 1; i.n = i.n + w; i.has[v] = (i.has[v] or 0) + w end
+function SYM._add(i, v, w)
+  i.has[v] = (i.has[v] or 0) + w end
 
-function COLS.add(i, row, w)
-  for _, col in ipairs(i.all) do add(col, row[col.at], w) end; return row end 
+function COLS._add(i, row, w)
+  for _, col in ipairs(i.all) do add(col, row[col.at], w) end end 
  
-
-function DATA.add(i, row, w)
-  w = w or 1
-  if not i.cols then i.cols = require("types").Cols(row) else
-    i._mid = nil; i.cols:add(row, w) -- Fixed: COLS:add is now available.
-    if w > 0 then l.push(i.rows, row) else
-      for n, r in ipairs(i.rows) do if r == row then table.remove(i.rows, n); break end 
+function DATA._add(i, row, w)
+  if not i.cols then i.cols = Cols(row) 
+  else  
+    i._mid = nil
+    i.cols:add(row, w) -- Fixed: COLS:add is now available.
+    if w > 0 
+    then l.push(i.rows, row) 
+    else  --- usuually removes worst item, so search from back
+      for n = #i.rows,1,-1 do if r == i.rows[n] then table.remove(i.rows, n); break end 
     end end end end
 
 -- ## Query
@@ -58,11 +61,11 @@ function SYM.spread(i)
   return -l.sum(i.has, function(_, v) return (v / i.n) * log(v / i.n, 2) end) 
 end
 
-function NUM.norm(i, v,    sd)
+function NUM.norm(i, v,    z)
   if v == "?" then return v end
-  sd = i:spread() + 1e-32; return 1 / (1 + exp(-1.7 * (v - i.mu) / sd)) end 
+  z = (v - i.mu)/(i:spread() + 1e-32)
+  return 1 / (1 + exp(-1.7 * l.crop(z,-3,3)))end 
  
-
 -- ## Distances
 -- mink: Minkowski distance calculates aggregate goal error.
 -- wins: opposite of regret, normalized between population median and best.
