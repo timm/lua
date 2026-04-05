@@ -17,14 +17,18 @@ eg["-h"] = function(_) print(help) end
 eg["--the"] = function(_) l.oo(the) end
 
 eg["--all"] = function(arg,    ss)
-  ss = {}; for k in pairs(eg) do if k ~= "--all" then l.push(ss, k) end end
+  ss = {}
+  for k in pairs(eg) do if k ~= "--all" then l.push(ss, k) end end
   for _, k in ipairs(l.sort(ss)) do
-    print("\n" .. k); math.randomseed(the.seed); eg[k](arg) end end
+    print("\n" .. k)
+    math.randomseed(the.seed)
+    eg[k](arg) end end
 
 eg["--csv"] = function(f,    n)
-  n = 0; for row in l.things(f) do 
-    if n % 30 == 0 then print(l.cat(l.map(row, l.rat))) end; n = n + 1 
-  end end
+  n = 0
+  for row in l.things(f) do 
+    if n % 30 == 0 then print(l.cat(l.map(row, l.rat))) end
+    n = n + 1 end end
 
 eg["--data"] = function(f,    data)
   data = types.Data(f)
@@ -32,32 +36,44 @@ eg["--data"] = function(f,    data)
     print(string.format("%s: n=%d mid=%s spread=%s", 
       c.txt, c.n, l.rat(c:mid()), l.rat(c:spread()))) end end
 
-eg["--tree"] = function(f,    data, rows)
+eg["--tree"] = function(f,    data,rows,fn_y)
   data = types.Data(f); rows = l.many(data.rows, the.Budget)
   data = data:clone(rows)
-  tree.build(types.Tree(function(r) return data:disty(r) end), data, data.rows):show() 
-end
+  fn_y = function(r) return data:disty(r) end
+  tree.build(types.Tree(fn_y), data, data.rows):show() end
 
-eg["--ranks"] = function(    dict, name, k, len)
+eg["--ranks"] = function(    dict,name,k,len)
   dict = {}
   for n = 1, 20 do
-    name = "t" .. n; dict[name] = {}
+    name = "t" .. n;
+    dict[name] = {}
     k, len = (n <= 5 and 2 or 1), (n <= 5 and 10 or 20)
-    for _ = 1, 50 do l.push(dict[name], l.weibull(k, len)) end end
-  print("\nTop Tier Treatments:"); for k, num in pairs(methods.bestRanks(dict)) do
-    print(string.format("  %-5s median: %s", k, l.rat(num:mid()))) end end
+    for _ = 1, 50 do 
+      l.push(dict[name], l.weibull(k, len)) end end
+  print("\nTop Tier Treatments:")
+  for k, num in pairs(methods.bestRanks(dict)) do
+    print(l.fmt("  %-5s median: %s", k, l.rat(num:mid()))) end end
 
-eg["--test"] = function(f,    data, outs, fn_win, n, test, data2, node, top)
-  data = types.Data(f); outs = types.Num("win"); fn_win = methods.wins(data)
+-- ## Eg
+-- Verification suite restored from ezr3.lua.
+
+eg["--test"] = function(f,    data,outs,n,test,data2,node,top,fn_win,fn_y,fn_sort)
+  data = types.Data(f)
+  outs = types.Num("win")
+  fn_win = methods.wins(data)
   for _ = 1, 20 do
-    l.shuffle(data.rows); n = #data.rows // 2; test = l.slice(data.rows, n + 1)
+    l.shuffle(data.rows)
+    n = #data.rows // 2
+    test = l.slice(data.rows, n + 1)
     data2 = data:clone(l.slice(data.rows, 1, math.min(n, the.Budget)))
-    node = tree.build(types.Tree(function(r) return data2:disty(r) end), data2, data2.rows)
-    l.sort(test, function(a, b) return node:leaf(a).y:mid() < node:leaf(b).y:mid() end)
-    top = l.sort(l.slice(test, 1, the.Check), function(a, b) 
+    fn_y = function(r) return data2:disty(r) end
+    node = tree.build(types.Tree(fn_y), data2, data2.rows)
+    fn_sort = function(a, b) return node:leaf(a).y:mid() < node:leaf(b).y:mid() end
+    l.sort(test, fn_sort)
+    top = l.sort(l.slice(test, 1, the.Check), function(a,b) 
       return data2:disty(a) < data2:disty(b) end)
-    methods.add(outs, fn_win(top[1])) end; print(l.rat(math.floor(outs:mid()))) 
-end
+    methods.add(outs, fn_win(top[1])) end
+  print(l.rat(math.floor(outs:mid()))) end
 
 -- ## Main
 -- CLI loop.
