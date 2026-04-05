@@ -10,17 +10,21 @@ local cat,trim,rat         = lib.cat,lib.trim,lib.rat
 local thing,things,bisect  = lib.thing,lib.things,lib.bisect
 local weibull              = lib.weibull
 
-the = {
-  leaf   = 2, 
-  Budget = 50, 
-  Check  = 5, 
-  Show   = 30, 
-  seed   = 1, 
-  p      = 2,
-  cliffs = 0.195, 
-  conf   = 1.36,  
-  eps    = 0.35   
-}
+local the,help = {}, [[   
+tree.lua : explainable multi-objective optimiization
+(c) 2026, Tim Menzies <timm@ieee.org>, MIT license
+
+  -B Budget=50     initial building budget
+  -C Check=5       final check budget
+  -c cliffs=0.195  Cliff's delta threshold
+  -e eps=0.35      Cohen's threshold
+  -k ksconf=1.36   KS test threshold
+  -l leaf=3        min rows per tree leaf
+  -p p=2           distance coeffecient
+  -s seed=1        random number seed
+  -S Show=30       width LHS tree displau
+  -h               show help
+]]
 
 local floor,max,min,abs,log,exp = math.floor,math.max,math.min,math.abs,math.log,math.exp
 local rand,BIG = math.random, 1E32
@@ -128,7 +132,9 @@ function TREE.build(i, d, rows,     mid, best, bestW, w)
   end; return i end
 
 function NUM.leaf(i,cut,v) return v<=cut end
+
 function SYM.leaf(i,cut,v) return v==cut end
+
 function TREE.leaf(i,row,     v)
   if not i.col then return i end; v=row[i.at]
   if v=="?" then return i.left:leaf(row) end
@@ -143,6 +149,7 @@ function TREE.nodes(i, fn, lvl, pre)
     p[1]:nodes(fn, lvl+1, i.col.txt.." "..p[2].." "..rat(i.cut)) end end
 
 function SYM.op(i) return "==", "!=" end
+
 function NUM.op(i) return "<=", ">"  end
 
 function TREE.show(i)
@@ -191,7 +198,7 @@ local function same(xs, ys, eps,    n, m, gt, lt, ks, f)
   ks, f = 0, function(v) return abs(bisect(xs,v)/n - bisect(ys,v)/m) end
   for _, v in ipairs(xs) do ks = max(ks, f(v)) end
   for _, v in ipairs(ys) do ks = max(ks, f(v)) end
-  return ks <= the.conf * ((n+m)/(n*m))^0.5 end
+  return ks <= the.ksconf * ((n+m)/(n*m))^0.5 end
 
 function bestRanks(dict,    items, k0, lst0, best)
   items = {}
@@ -208,7 +215,14 @@ function bestRanks(dict,    items, k0, lst0, best)
   return best end
 
 -- eg -----------------------------------------------------------------------------------
-eg = {}
+local function run(f,arg) math.randomseed(the.seed); f(arg) end
+local eg = {}
+
+function eg.h(_) print(help) end
+
+function eg.all(f)
+  for k,_ in pairs(eg) do if k ~= "all" then a[1+#a]=k end end 
+  for _,k in sorted(a) do run(eg[k],f) end end
 
 function eg.csv(f,     n)
   n=0; for row in things(f) do
@@ -249,6 +263,7 @@ function eg.test(f,     d, outs, win, n, test, d2, t, top)
   print(rat(floor(outs:mid()))) end
 
 -- main ---------------------------------------------------------------------------------
+
 local function main(     k, i, v)
   i = 1; while i <= #arg do
     k = arg[i]:match"^%-%-?(.+)"; i = i + 1
@@ -258,6 +273,8 @@ local function main(     k, i, v)
         v = arg[i] and not arg[i]:match"^%-" and arg[i] or nil
         if v then i = i + 1 end; eg[k](v)
       elseif the[k]~=nil then the[k] = thing(arg[i]); i = i + 1 end end end end
+
+for k,v in help:gmatch("([%w_]+)%s*=%s*([^%s]+)") do the[k] = thing(v) end
 
 math.randomseed(the.seed) 
 if arg[0]:match("tree%.lua$") then main() end
