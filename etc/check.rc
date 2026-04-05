@@ -1,0 +1,6 @@
+-- .luacheckrc
+-- Global settings
+std = "lua54" -- Set the standard (lua51, lua52, lua53, luajit, etc.)
+globals = {"my_global_var"} -- Allow specific globals
+ignore = {"211"} -- Ignore specific warning codes (e.g., unused variable)
+

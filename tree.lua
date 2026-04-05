@@ -1,6 +1,6 @@
 #!/usr/bin/env lua
 -- <!-- vim: set et sw=2 tw=90 : -->
-local the,help = {}, [[   
+local the,help = {}, [[
 tree.lua : explainable multi-objective optimiization
 (c) 2026, Tim Menzies <timm@ieee.org>, MIT license
 
@@ -32,13 +32,13 @@ local NUM, SYM, COLS, DATA, TREE = {}, {}, {}, {}, {}
 local Num, Sym, Data, Tree, Cols
 
 -- structs ------------------------------------------------------------
-function Tree(score) 
+function Tree(score)
   return new(TREE, {score=score}) end
 
-function Sym(s, at)  
+function Sym(s, at)
   return new(SYM, {txt=s or "", at=at or 0, has={}, n=0}) end
 
-function Num(s, at)  
+function Num(s, at)
   return new(NUM, {txt=s or "", at=at or 0, n=0, mu=0, m2=0,
                    goal=s and s:match"-$" and 0 or 1}) end
 
@@ -46,17 +46,17 @@ function Cols(names,    x, y, all, col)
   x, y, all = {}, {}, {}
   for at, s in ipairs(names) do
     col = push(all, (s:match"^[A-Z]" and Num or Sym)(s, at))
-    if not s:match"X$" then 
+    if not s:match"X$" then
       push(s:match"[%+%-!]$" and y or x, col) end end
   return new(COLS, {x=x, y=y, all=all, names=names}) end
 
-function Data(src,     d) 
-  d = new(DATA, {rows={}, cols=nil, _mid=nil}) 
-  if type(src)=="string" then for row in things(src) do add(d,row) end 
+function Data(src,     d)
+  d = new(DATA, {rows={}, cols=nil, _mid=nil})
+  if type(src)=="string" then for row in things(src) do add(d,row) end
   else for _, row in ipairs(src or {}) do add(d,row) end end
-  return d end 
+  return d end
 
-function DATA.clone(i,rows) 
+function DATA.clone(i,rows)
   return adds(rows or {}, Data({i.cols.names})) end
 
 -- update -------------------------------------------------------------
@@ -72,7 +72,7 @@ function NUM.add(i,v,w,    d)
 function SYM.add(i,v,w)
   i.n = i.n + w; i.has[v] = (i.has[v] or 0) + w end
 
-function COLS.add(i,row,w) 
+function COLS.add(i,row,w)
   for _,c in ipairs(i.all) do add(c,row[c.at],w) end; return row end
 
 function DATA.add(i,row,w)
@@ -95,7 +95,7 @@ function DATA.mid(i)
 function NUM.spread(i)
   return i.n > 1 and (max(0,i.m2)/(i.n - 1))^0.5 or 0 end
 function SYM.spread(i)
-  return -sum(i.has, 
+  return -sum(i.has,
               function(_, v) return (v/i.n) * log(v/i.n, 2) end) end
 
 function NUM.norm(i,v,     sd)
@@ -103,7 +103,7 @@ function NUM.norm(i,v,     sd)
   sd = i:spread() + 1e-32
   return 1/(1 + exp(-1.7*(v - i.mu)/sd)) end
 
-function adds(lst,     c) 
+function adds(lst,     c)
   c=c or Num(); for _,v in ipairs(lst or {}) do add(c,v) end; return c end
 
 function mink(lst,     d,n)
@@ -124,17 +124,17 @@ function wins(d,     ds, lo, med)
 function TREE.build(i, d, rows,     mid, best, bestW, w)
   mid = d:clone(rows):mid()
   i.y = adds(map(rows, function(r) return i.score(r) end))
-  i.mids = kv(d.cols.y, function(c) return c.txt end, 
+  i.mids = kv(d.cols.y, function(c) return c.txt end,
                          function(c) return mid[c.at] end)
   if #rows < 2*the.leaf then return i end; best, bestW = nil, BIG
   for _, col in ipairs(d.cols.x) do
     for _, sp in ipairs(col:splits(rows, i.score)) do
       w = sp.lhs.n * sp.lhs:spread() + sp.rhs.n * sp.rhs:spread()
-      if w < bestW and min(#sp.left,#sp.right) >= the.leaf then 
+      if w < bestW and min(#sp.left,#sp.right) >= the.leaf then
         best = sp; bestW = w end end end
   if best then
     i.col, i.cut, i.at = best.col, best.cut, best.col.at
-    i.left  = Tree(i.score):build(d, best.left) 
+    i.left  = Tree(i.score):build(d, best.left)
     i.right = Tree(i.score):build(d, best.right)
   end; return i end
 
@@ -178,7 +178,7 @@ local function split(col, rows, score, cut, test,
 
 function NUM.splits(i, rows, score,     vals, med, sp)
   vals = {}
-  for _,r in ipairs(rows) do 
+  for _,r in ipairs(rows) do
     if r[i.at]~="?" then push(vals,r[i.at]) end end
   if #vals<2 then return {} end
   sort(vals); med=vals[floor(#vals/2)+1]
@@ -228,7 +228,7 @@ local eg = {}
 function eg.h(_) print(help) end
 
 function eg.all(f,     a)
-  a={}; for k,_ in pairs(eg) do if k ~= "all" then a[1+#a]=k end end 
+  a={}; for k,_ in pairs(eg) do if k ~= "all" then a[1+#a]=k end end
   for _,k in pairs(sort(a)) do print("\n"..k); run(eg[k],f) end end
 
 function eg.csv(f,     n)
@@ -255,14 +255,15 @@ function eg.ranks(    dict)
   for k, num in pairs(bestRanks(dict)) do
     print(string.format("  %-5s median: %s", k, rat(num:mid()))) end end
 
-function eg.test(f,     d, outs, win, n, test, d2, t, top)
+function eg.test(f)
+  local d, outs, win, n, test, d2, t, top
   d = Data(f); outs = Num("win"); win = wins(d)
   for _ = 1, 20 do
     shuffle(d.rows); n = #d.rows // 2
     test = slice(d.rows, n+1)
     d2 = d:clone(slice(d.rows, 1, min(n, the.Budget)))
     t = Tree(function(r) return d2:disty(r) end):build(d2, d2.rows)
-    sort(test, function(a,b) 
+    sort(test, function(a,b)
                   return t:leaf(a).y:mid() < t:leaf(b).y:mid() end)
     top = sort(slice(test, 1, the.Check),
                function(a,b) return d2:disty(a) < d2:disty(b) end)
@@ -276,7 +277,7 @@ local function main(     k, i, v)
   i = 1; while i <= #arg do
     k = arg[i]:match"^%-%-?(.+)"; i = i + 1
     if k then
-      math.randomseed(the.seed) 
+      math.randomseed(the.seed)
       if eg[k] then
         v = arg[i] and not arg[i]:match"^%-" and arg[i] or nil
         if v then i = i + 1 end; eg[k](v)
@@ -284,5 +285,5 @@ local function main(     k, i, v)
 
 for k,v in help:gmatch("([%w_]+)%s*=%s*([^%s]+)") do the[k] = thing(v) end
 
-math.randomseed(the.seed) 
+math.randomseed(the.seed)
 if arg[0]:match("tree%.lua$") then main() end

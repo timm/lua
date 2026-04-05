@@ -39,3 +39,14 @@ Cols ?=3
 		--font-size=$(Font) --columns $(Cols) \
 		-o - $< | ps2pdf - $@
 	open $@
+
+F?=tree.lua
+check:
+	luacheck --config $I/etc/check.rc $F
+
+CSVS=ls -r ~/gits/moot/optimize/*/*.csv | xargs -P 20 -I {} sh -c 
+
+~/tmp/luatest.log :
+	@$(CSVS) 'lua tree.lua  --test {} 2>&1' | tee $@
+	cut -d \  -f 1 $@ | sort -n | fmt -65
+
