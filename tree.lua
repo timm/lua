@@ -1,5 +1,5 @@
 #!/usr/bin/env lua
--- vim: set et sw=2 tw=90 :
+-- <!-- vim: set et sw=2 tw=90 : -->
 local the,help = {}, [[   
 tree.lua : explainable multi-objective optimiization
 (c) 2026, Tim Menzies <timm@ieee.org>, MIT license
