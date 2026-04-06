@@ -1,6 +1,5 @@
 local s = require "the"
 local l, NUM, SYM, COLS, DATA, TREE = s.l, s.NUM, s.SYM, s.COLS, s.DATA, s.TREE
-local adds=require("methods").adds
 
 -- ## Structs
 -- Constructors for core data containers.
@@ -17,7 +16,7 @@ local function Num(s_name, n)
                    goal = s_name and s_name:match "-$" and 0 or 1}) end
 
 local function _newcol(n,name)
-  return (name:match "^[A-Z]" and Num or Sym)(name, n))
+  return (name:match"^[A-Z]" and Num or Sym)(name, n) end
 
 local function Cols(ss_names,    xs,ys,all,col)
   xs, ys, all = {}, {}, {}
@@ -35,7 +34,7 @@ local function Data(src,    data)
   return data end
 
 function DATA.clone(i, rows)
-  return adds(rows or {}, Data({i.cols.names})) end
+  return require("methods").adds(rows or {}, Data({i.cols.names})) end
 
 return {Tree = Tree, Sym = Sym, Num = Num, Cols = Cols, Data = Data}
 
