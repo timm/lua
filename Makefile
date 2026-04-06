@@ -80,3 +80,6 @@ CSVS=ls -r ~/gits/moot/optimize/*/*.csv | xargs -P 20 -I {} sh -c
 	@$(CSVS) 'lua ezr.lua --test {} 2>&1' | tee $@
 	cut -d \  -f 1 $@ | sort -n | fmt -65
 
+D ?=  ~/gits/moot/optimize/misc/auto93.csv
+all: ## run all the tests
+	lua ezr.lua --all $D

@@ -29,6 +29,10 @@ local Tree, Sym, Num, Cols, Data
 -- Forward references needed for functions defined at end.
 local add, sub, adds, mink, wins, split, same, bestRanks
 
+-- Maths
+local abs,min,max,log,exp = math.abs,math.min,math.max,math.log,math.exp
+local floor,rand,randomseed = math.floor, math.random, math.randomseed
+
 -- ## Structs
 
 -- Constructor for a tree node with a scoring function.
@@ -117,20 +121,20 @@ function DATA.mid(i)
 
 -- Standard deviation for numbers.
 function NUM.spread(i) 
-  return i.n > 1 and (math.max(0,i.m2)/(i.n - 1))^0.5 or 0 end
+  return i.n > 1 and (max(0,i.m2)/(i.n - 1))^0.5 or 0 end
 
 -- Entropy for symbols.
 function SYM.spread(i,    n) 
-  n=0; for _,v in pairs(i.has) do if v>0 then n=n-v/i.n*math.log(v/i.n,2) end end; return n end
+  n=0; for _,v in pairs(i.has) do if v>0 then n=n-v/i.n*log(v/i.n,2) end end; return n end
 
 -- Sigmoid normalization.
 function NUM.norm(i,v,    sd)
   if v=="?" then return v end
-  sd = i:spread() + 1e-32; return 1/(1 + math.exp(-1.7*(v - i.mu)/sd)) end
+  sd = i:spread() + 1e-32; return 1/(1 + exp(-1.7*(v - i.mu)/sd)) end
 
 -- Minkowski distance to ideal goal.
 function DATA.disty(i,row,    fn,err,n)
-  fn = function(col) return math.abs(col:norm(row[col.at]) - col.goal) end
+  fn = function(col) return abs(col:norm(row[col.at]) - col.goal) end
   err, n = 0, 0
   for _, x in ipairs(l.map(i.cols.y, fn)) do n=n+1; err=err+x^the.p end
   return n==0 and 0 or (err/n)^(1/the.p) end
@@ -140,7 +144,7 @@ function wins(data,    vs_errs,lo,n_mid)
   vs_errs = l.sort(l.map(data.rows, function(row) return data:disty(row) end))
   lo, n_mid = vs_errs[1], vs_errs[#vs_errs//2+1]
   return function(row) 
-    return math.floor(100*(1 - ((data:disty(row)-lo) / (n_mid-lo+1e-32)))) end end
+    return floor(100*(1 - ((data:disty(row)-lo) / (n_mid-lo+1e-32)))) end end
 
 -- ## Tree
 
@@ -152,7 +156,7 @@ function TREE.build(i,data,rows,    mid,best,bestW,w)
   for _, col in ipairs(data.cols.x) do
     for _, cut in ipairs(col:splits(rows, i.score)) do
       w = cut.lhs.n * cut.lhs:spread() + cut.rhs.n * cut.rhs:spread()
-      if w < bestW and math.min(#cut.left,#cut.right) >= the.leaf then 
+      if w < bestW and min(#cut.left,#cut.right) >= the.leaf then 
         best, bestW = cut, w end end end
   if best then
     i.col, i.cut, i.at = best.col, best.cut, best.col.at
@@ -212,31 +216,47 @@ function SYM.splits(i,rows,fn,    seen,out,cut)
 -- ## Stats
 
 -- Non-parametric comparison.
-function same(xs,ys,eps,    n,m,ngt,nlt,ks,fn)
-  xs,ys = l.sort(xs),l.sort(ys); n,m = #xs,#ys
-  if math.abs(xs[n//2+1] - ys[m//2+1]) <= eps then return true end
-  ngt, nlt = 0, 0
-  for _, v in ipairs(xs) do
-    ngt = ngt + l.bisect(ys,v); nlt = nlt + (m - l.bisect(ys, v+1e-32)) end
-  if math.abs(ngt - nlt) / (n*m) > the.cliffs then return false end
-  ks, fn = 0, function(v) return math.abs(l.bisect(xs,v)/n - l.bisect(ys,v)/m) end
-  for _, v in ipairs(xs) do ks = math.max(ks, fn(v)) end
-  for _, v in ipairs(ys) do ks = math.max(ks, fn(v)) end
-  return ks <= the.ksconf * ((n+m)/(n*m))^0.5 end
+-- ## query -------------------------------------------------------------------
 
+-- Checks if two distributions are the same using Cliffs Delta and KS test.
+local function same(xs,ys,eps,    n,m,ngt,nlt,ks,fn)
+  xs,ys = l.sort(xs), l.sort(ys)
+  n,m   = #xs,#ys
+
+  if abs(xs[n//2+1] - ys[m//2+1]) <= eps then return true end -- cohen
+
+  ngt,nlt = 0,0
+  for _,v in ipairs(xs) do 
+    ngt = ngt + l.bisect(ys,v)
+    nlt = nlt + (m - l.bisect(ys,v+1e-32)) end
+  if abs(ngt - nlt) / (n*m) > the.cliffs then return false end -- cliffs
+
+  ks,fn = 0, function(v) return abs(l.bisect(xs,v)/n - l.bisect(ys,v)/m) end
+  for _,v in ipairs(xs) do ks = max(ks, fn(v)) end
+  for _,v in ipairs(ys) do ks = max(ks, fn(v)) end
+  return ks <= the.ksconf * ((n+m)/(n*m))^0.5 end -- KS test
+ 
 -- Groups results into top-tier ranks.
-function bestRanks(dict,    names,eps,rows,out)
-  names, out = {}, {}; for k in pairs(dict) do l.push(names, k) end
+-- ## query -------------------------------------------------------------------
+
+-- Sorts treatments by median and groups them into ranks using the same() test.
+local function bestRanks(dict,    names,eps,rows,out,rank,num)
+  names, out = {}, {}
+  for k in pairs(dict) do l.push(names, k) end
   l.sort(names, function(a,b) return adds(dict[a]):mid() < adds(dict[b]):mid() end)
-  eps = adds(dict[names[1]]):spread() * the.eps; rows = dict[names[1]]
-  out[names[1]] = adds(rows)
-  for i=2,#names do
-    if not same(rows, dict[names[i]], eps) then rows = dict[names[i]] end
-    out[names[i]] = adds(rows) end; return out end
+  eps = adds(dict[names[1]]):spread() * the.eps
+  rows = dict[names[1]]
+  rank, out[1] = 1, adds(rows, Num(names[1], 1))
+  for n=2,#names do
+    if not same(rows, dict[names[n]], eps) then 
+      rank=rank+1
+      rows=dict[names[n]] end -- BAIL if different
+    out[1+#out] = adds(rows, Num(names[n], rank)) end
+  return out end
 
 -- ## Library
 
--- Sets the metatable index for a new object to enable class-like inheritance.
+-- Sets the metatable index for a new object to enable polymorhism.
 function l.new(kl,obj) kl.__index=kl; return setmetatable(obj,kl) end
 
 -- Appends an item to the end of a table and returns the added item.
@@ -246,10 +266,12 @@ function l.push(t,x) t[1+#t]=x; return x end
 function l.sort(t,f) table.sort(t,f); return t end
 
 -- Transforms a table by applying a function to each element.
-function l.map(t,f,  u) u={}; for i,x in ipairs(t) do u[i]=f(x) end; return u end
+function l.map(t,f,  u) 
+  u={}; for i,x in ipairs(t) do u[i]=f(x) end; return u end
 
 -- Creates a new table by applying key and value transformation functions.
-function l.kv(t,fk,fv,  u) u={}; for _,x in ipairs(t) do u[fk(x)]=fv(x) end; return u end
+function l.kv(t,fk,fv,  u) 
+  u={}; for _,x in ipairs(t) do u[fk(x)]=fv(x) end; return u end
 
 -- Returns a subset of a table from index lo to hi.
 function l.slice(t,lo,hi,  u) 
@@ -257,7 +279,7 @@ function l.slice(t,lo,hi,  u)
 
 -- Randomizes the order of elements in a table using the Fisher-Yates shuffle.
 function l.shuffle(t,  j) 
-  for i=#t,2,-1 do j=math.random(i); t[i],t[j]=t[j],t[i] end; return t end
+  for i=#t,2,-1 do j=rand(i); t[i],t[j]=t[j],t[i] end; return t end
 
 -- Returns a new table containing n randomly selected items from the input.
 function l.many(t,n) return l.slice(l.shuffle(t),1,n) end
@@ -271,7 +293,7 @@ function l.bisect(t,x,  lo,hi,m)
 -- Recursively converts a value or table into a readable string representation.
 function l.rat(x)
   if type(x)~="table" then 
-    return math.type(x)=="float" and string.format("%.2f",x) or tostring(x) 
+    return type(x)=="float" and string.format("%.2f",x) or tostring(x) 
   end
   local u={}; for k,v in pairs(x) do 
     u[1+#u]=type(k)=="number" and l.rat(v) or k.."="..l.rat(v) 
@@ -283,15 +305,17 @@ function l.thing(s) return s=="true" or (s~="false" and (tonumber(s) or s)) end
 
 -- Returns an iterator that yields parsed rows from a CSV file.
 function l.things(src,  f)
-  f = io.open(src); return function()
-    local s = f:read(); if s then
-      local t={}; for x in s:gmatch"[^,]+" do 
-        l.push(t, l.thing(x:match"^%s*(.-)%s*$")) 
-      end; return t
+  f = io.open(src)
+  return function(      s,t)
+    s = f:read()
+    if s then
+      t={}
+      for x in s:gmatch"[^,]+" do l.push(t,l.thing(x:match"^%s*(.-)%s*$")) end
+      return t
     else f:close() end end end
 
 -- Generates a random variable following the Weibull distribution.
-function l.weibull(k, lambda) return lambda * (-math.log(1 - math.random()))^(1/k) end
+function l.weibull(k, lambda) return lambda * (-log(1 - rand()))^(1/k) end
 
 -- ## Eg (Examples)
 local eg = {}
@@ -307,22 +331,33 @@ eg["--all"] = function(arg,   ss)
   ss = {}
   for k in pairs(eg) do if k ~= "--all" then l.push(ss, k) end end
   for _, k in ipairs(l.sort(ss)) do
-    print("\n" .. k); math.randomseed(the.seed); eg[k](arg) end end
+    print("\n" .. k); randomseed(the.seed); eg[k](arg) end end
 
 -- Dump CSV.
 eg["--csv"] = function(f,   n) n=0; for r in l.things(f) do 
   if n%30==0 then print(l.rat(r)) end; n=n+1 end end
 
 -- Synthetic distribution ranking.
-eg["--ranks"] = function(    dict,name,k,len)
-  dict = {}
-  for n = 1, 20 do
-    name = "t"..n; dict[name] = {}
-    k, len = (n <= 5 and 2 or 1), (n <= 5 and 10 or 20)
-    for _ = 1, 50 do l.push(dict[name], l.weibull(k, len)) end end
-  print("\nTop Tier Treatments:"); for k, v in pairs(bestRanks(dict)) do 
-    print(string.format("  %-5s median: %s", k, l.rat(v:mid()))) end end
+-- ## query -------------------------------------------------------------------
 
+-- Tests ranking logic by generating Weibull distributions.
+-- ## query -------------------------------------------------------------------
+
+-- Generates and ranks 20 treatments using different distribution shapes.
+eg["--ranks"] = function(    dict,name,k,len,res)
+  dict = {}
+  for n=1,20 do
+    name = "t"..n; dict[name] = {}
+    k,len = (n<=5 and 2 or 1), (n<=5 and 10 or 20)
+    for _=1,50 do l.push(dict[name], l.weibull(k,len)) end end
+  print("\nTop Tier Treatments:")
+  res = bestRanks(dict)
+  l.sort(res, function(a,b) return a.at < b.at end)
+  for _,num in ipairs(res) do
+    print(string.format("  rank %-2s %-5s median: %s",     
+                         num.at, num.txt, l.rat(num:mid()))) end end
+
+      
 -- Column midpoints.
 eg["--data"] = function(f,   d) d=Data(f); for _,c in ipairs(d.cols.y) do 
   print(c.txt, l.rat(c:mid())) end end
@@ -336,13 +371,13 @@ eg["--test"] = function(f,   d,outs,fw,n,ts,d2,node,top,fy,fs)
   d = Data(f); outs = Num("win"); fw = wins(d)
   for _ = 1, 20 do
     l.shuffle(d.rows); n = #d.rows // 2; ts = l.slice(d.rows, n + 1)
-    d2 = d:clone(l.slice(d.rows, 1, math.min(n, the.Budget)))
+    d2 = d:clone(l.slice(d.rows, 1, min(n, the.Budget)))
     node = Tree(function(r) return d2:disty(r) end):build(d2, d2.rows)
     l.sort(ts, function(a,b) return node:leaf(a).y:mid() < node:leaf(b).y:mid() end)
     top = l.sort(l.slice(ts, 1, the.Check), function(a,b) 
       return d2:disty(a) < d2:disty(b) end)
     add(outs, fw(top[1])) end
-  print(l.rat(math.floor(outs:mid()))) end
+  print(l.rat(floor(outs:mid()))) end
 
 -- ## Main
 
@@ -353,15 +388,16 @@ for k,v in help:gmatch("([%w_]+)%s*=%s*([^%s]+)") do the[k]=l.thing(v) end
 local function main(   k,v,n)
   n=1; while n <= #arg do
     k,v = arg[n], arg[n+1]
-    n=n+1
+    n   = n + 1
     if eg[k] then 
-      math.randomseed(the.seed)
+      randomseed(the.seed)
       eg[k](v and l.thing(v) or nil)
       if v and not eg[v] then n=n+1 end
     else 
       for k1,v1 in pairs(the) do 
         if k=="-"..k1:sub(1,1) then 
-          the[k1]=l.thing(v); n=n+1 end end end end end
+          the[k1] = l.thing(v)
+          n=n+1 end end end end end
 
 -- Maybe call main
 if (arg[0] or ""):match"ezr.lua" then main() end
