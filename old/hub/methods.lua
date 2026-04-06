@@ -7,6 +7,9 @@ local Cols = require("types").Cols
 -- add/sub/adds: The primary interface for state changes.
 -- Centroids (mid) are computed once, cached, and reset on any update.
 
+function DATA.add(i, row, w) return add(i, row, w) end
+function COLS.add(i, row, w) return add(i, row, w) end
+
 local function add(i, v, w)
   if v ~= "?" then i.n = i.n + 1; i:_add(v, w or 1) end; return v end
 

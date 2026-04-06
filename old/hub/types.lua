@@ -26,11 +26,13 @@ local function Cols(ss_names,    xs,ys,all,col)
        l.push(name:match "[%+%-!]$" and ys or xs, col) end end
   return l.new(COLS, {x = xs, y = ys, all = all, names = ss_names, n=0}) end
 
+-- types.lua
 local function Data(src,    data)
   data = l.new(DATA, {rows = {}, cols = nil, _mid = nil, n=0})
-  if type(src) == "string" 
-  then for    row in l.things(src)     do DATA.add(data, row) end
-  else for _, row in ipairs(src or {}) do DATA.add(data, row) end end
+  if src then
+    if type(src) == "string" 
+    then for    row in l.things(src) do data:add(row) end 
+    else for _, row in ipairs(src)   do data:add(row) end end end
   return data end
 
 function DATA.clone(i, rows)

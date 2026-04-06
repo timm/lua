@@ -50,7 +50,7 @@ Pluralization (trailing `s` or doubled characters) indicates a table or list:
 
 ## **Geometry & Layout**
 
-* **Indentation & Width**: 2 spaces; max 90 characters.
+* **Indentation & Width**: 2 spaces; max 90 wide characters.
 * **The Lonely End Rule**: Never leave `end` on its own line if it can be joined to the line before.
     * `function Tree(score) return new(TREE, {score=score}) end`
 * **Density**: Use semicolons (`;`) to pack related statements and prefer boolean shortcuts (`and/or`).
@@ -58,6 +58,7 @@ Pluralization (trailing `s` or doubled characters) indicates a table or list:
 * **Signatures (GAP)**: Use a 4-space break to separate inputs from internal locals. For multiple locals, use no spaces between them.
     * `function mink(vs,     err,n)`
 * **Localization**: All standalone functions (constructors, helpers, stats) must be `local` for speed and encapsulation.
+* **Comments**: Before all functions, one blank line, one line comment, then the function.
 
 
 ## **Object Orientation & Commenting**
