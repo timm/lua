@@ -185,7 +185,7 @@ function TREE.nodes(i,fn,lvl,pre)
 function TREE.show(i)
   i:nodes(function(node,lvl,pre)
     local p = lvl > 0 and string.rep("|   ", lvl-1)..pre or ""
-    io.write(string.format("%-"..the.Show.."s ,%4s ,(%3d),  %s\n",
+    io.write(string.format("%-"..the.Show.."s ,%5.2f ,(%5s),  %s\n",
       p, l.rat(node.y:mid()), node.y.n, l.rat(node.mids))) end) end
 
 -- Partitions rows based on a test.
@@ -240,7 +240,7 @@ local function same(xs,ys,eps,    n,m,ngt,nlt,ks,fn)
 -- ## query -------------------------------------------------------------------
 
 -- Sorts treatments by median and groups them into ranks using the same() test.
-local function bestRanks(dict,    names,eps,rows,out,rank,num)
+local function bestRanks(dict,     eps,names,rows,out,rank,num)
   names, out = {}, {}
   for k in pairs(dict) do l.push(names, k) end
   l.sort(names, function(a,b) return adds(dict[a]):mid() < adds(dict[b]):mid() end)
