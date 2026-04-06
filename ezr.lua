@@ -1,8 +1,9 @@
 #!/usr/bin/env lua
--- ezr3.lua : explainable multi-objective optimization
--- (c) 2026, Tim Menzies <timm@ieee.org>, MIT license
-
-local the, help = {}, [[
+-- ezr3.lua : explainable multi-objective optimization  
+-- (c) 2026, Tim Menzies <timm@ieee.org>, MIT license   
+    
+local the, help = {}, [[   
+    
 ezr3.lua : explainable multi-objective optimization
 (c) 2026, Tim Menzies <timm@ieee.org>, MIT license
 
@@ -19,9 +20,14 @@ ezr3.lua : explainable multi-objective optimization
 ]]
 
 -- ## Registry & Forward Declarations
+
+-- `l` is for misc library fuctnions
 local l = {} 
+-- Types and constructors
 local NUM, SYM, COLS, DATA, TREE = {}, {}, {}, {}, {} 
-local Tree, Sym, Num, Cols, Data, add, sub, adds, mink, wins, split, same, bestRanks
+local Tree, Sym, Num, Cols, Data
+-- Forward references needed for functions defined at end.
+local add, sub, adds, mink, wins, split, same, bestRanks
 
 -- ## Structs
 
@@ -230,27 +236,61 @@ function bestRanks(dict,    names,eps,rows,out)
 
 -- ## Library
 
+-- Sets the metatable index for a new object to enable class-like inheritance.
 function l.new(kl,obj) kl.__index=kl; return setmetatable(obj,kl) end
+
+-- Appends an item to the end of a table and returns the added item.
 function l.push(t,x) t[1+#t]=x; return x end
+
+-- Sorts a table in-place using an optional comparator and returns the table.
 function l.sort(t,f) table.sort(t,f); return t end
-function l.map(t,f,   u) u={}; for i,x in ipairs(t) do u[i]=f(x) end; return u end
-function l.kv(t,fk,fv,   u) u={}; for _,x in ipairs(t) do u[fk(x)]=fv(x) end; return u end
-function l.slice(t,lo,hi,   u) u={}; for i=(lo or 1),(hi or #t) do u[1+#u]=t[i] end; return u end
-function l.shuffle(t,   j) for i=#t,2,-1 do j=math.random(i); t[i],t[j]=t[j],t[i] end; return t end
+
+-- Transforms a table by applying a function to each element.
+function l.map(t,f,  u) u={}; for i,x in ipairs(t) do u[i]=f(x) end; return u end
+
+-- Creates a new table by applying key and value transformation functions.
+function l.kv(t,fk,fv,  u) u={}; for _,x in ipairs(t) do u[fk(x)]=fv(x) end; return u end
+
+-- Returns a subset of a table from index lo to hi.
+function l.slice(t,lo,hi,  u) 
+  u={}; for i=(lo or 1),(hi or #t) do u[1+#u]=t[i] end; return u end
+
+-- Randomizes the order of elements in a table using the Fisher-Yates shuffle.
+function l.shuffle(t,  j) 
+  for i=#t,2,-1 do j=math.random(i); t[i],t[j]=t[j],t[i] end; return t end
+
+-- Returns a new table containing n randomly selected items from the input.
 function l.many(t,n) return l.slice(l.shuffle(t),1,n) end
-function l.bisect(t,x,   lo,hi,m)
-  lo,hi = 1,#t; while lo<=hi do m=(lo+hi)//2; if t[m]<=x then lo=m+1 else hi=m-1 end end
-  return lo-1 end
+
+-- Finds the insertion point for x in a sorted table to maintain order.
+function l.bisect(t,x,  lo,hi,m)
+  lo,hi = 1,#t; while lo<=hi do 
+    m=(lo+hi)//2; if t[m]<=x then lo=m+1 else hi=m-1 end 
+  end; return lo-1 end
+
+-- Recursively converts a value or table into a readable string representation.
 function l.rat(x)
-  if type(x)~="table" then return math.type(x)=="float" and string.format("%.2f",x) or tostring(x) end
-  local u={}; for k,v in pairs(x) do u[1+#u]=type(k)=="number" and l.rat(v) or k.."="..l.rat(v) end
+  if type(x)~="table" then 
+    return math.type(x)=="float" and string.format("%.2f",x) or tostring(x) 
+  end
+  local u={}; for k,v in pairs(x) do 
+    u[1+#u]=type(k)=="number" and l.rat(v) or k.."="..l.rat(v) 
+  end
   return "{"..table.concat(l.sort(u),", ").."}" end
+
+-- Coerces a string into its most appropriate type: boolean, number, or string.
 function l.thing(s) return s=="true" or (s~="false" and (tonumber(s) or s)) end
-function l.things(src,   f)
+
+-- Returns an iterator that yields parsed rows from a CSV file.
+function l.things(src,  f)
   f = io.open(src); return function()
     local s = f:read(); if s then
-      local t={}; for x in s:gmatch"[^,]+" do l.push(t, l.thing(x:match"^%s*(.-)%s*$")) end; return t
+      local t={}; for x in s:gmatch"[^,]+" do 
+        l.push(t, l.thing(x:match"^%s*(.-)%s*$")) 
+      end; return t
     else f:close() end end end
+
+-- Generates a random variable following the Weibull distribution.
 function l.weibull(k, lambda) return lambda * (-math.log(1 - math.random()))^(1/k) end
 
 -- ## Eg (Examples)
@@ -306,13 +346,25 @@ eg["--test"] = function(f,   d,outs,fw,n,ts,d2,node,top,fy,fs)
 
 -- ## Main
 
+-- Use the `help` text to fill in `the`.
+for k,v in help:gmatch("([%w_]+)%s*=%s*([^%s]+)") do the[k]=l.thing(v) end
+
+--  Cli contents either call `eg` functions or reset cotnents of `the`.
 local function main(   k,v,n)
   n=1; while n <= #arg do
-    k,v = arg[n], arg[n+1]; n=n+1
-    if eg[k] then math.randomseed(the.seed); eg[k](v and l.thing(v) or nil)
+    k,v = arg[n], arg[n+1]
+    n=n+1
+    if eg[k] then 
+      math.randomseed(the.seed)
+      eg[k](v and l.thing(v) or nil)
       if v and not eg[v] then n=n+1 end
-    else for k1,v1 in pairs(the) do if k=="-"..k1:sub(1,1) then the[k1]=l.thing(v); n=n+1 end end end end end
+    else 
+      for k1,v1 in pairs(the) do 
+        if k=="-"..k1:sub(1,1) then 
+          the[k1]=l.thing(v); n=n+1 end end end end end
 
-for k,v in help:gmatch("([%w_]+)%s*=%s*([^%s]+)") do the[k]=l.thing(v) end
+-- Maybe call main
 if (arg[0] or ""):match"ezr.lua" then main() end
+
+-- That's all folks
 return {the=the, DATA=DATA, NUM=NUM, SYM=SYM, TREE=TREE, l=l}

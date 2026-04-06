@@ -37,23 +37,26 @@ sh: ## start up my own IDE
 	@printf "  you’ll land among the stars\n  — Les Brown\n\n$(RESET)"
 	@I=$I bash --init-file $I/etc/bash.rc -i
  
-OUT = ~/tmp/html
+HTML = ~/tmp/html
 LUA = $(wildcard *.lua)
-DOCS = $(LUA:%.lua=$(OUT)/%.html)
+DOCS = $(LUA:%.lua=$(HTML)/%.html)
 
-docs: $(OUT) $(DOCS)
+docs: $(HTML) $(DOCS)
 
-$(OUT):
-	@mkdir -p $(OUT)
+$(HTML):; @mkdir -p $(HTML)
 
-$(OUT)/%.html: %.lua $I/etc/top.html
+$(HTML)/%.html: %.lua $I/etc/top.html
 	@echo "Generating doco for $<"
-	@pycco -d $(OUT) $<
-	@cat $I/etc/my.css >> $(OUT)/pycco.css
-	@gawk -v x="$$(cat $I/etc/top.html)" \
+	@pycco -d $(HTML) $<
+	@cat $I/etc/my.css >> $(HTML)/pycco.css
+	@(echo "<p>"; gawk ' \
+		/id=/ {for(i=1;i<=NF;i++) if($$i~/id=/) {split($$i,a,/[="'\'']/); d=a[2]}} \
+		/<h2>/ {gsub(/<[^>]*>/,"",$$0); printf " <a href=\"#%s\">%s</a> |", d, $$1}' \
+		$@ | sed 's/|$$//' ; echo "</p><hr><h1>") > .1$<
+	@gawk -v x="$$(cat $I/etc/top.html .1$<)" \
 		'BEGIN {FS="<h1>"; RS="_jqz9v"} \
-		       {print $$1 x $$2}' $@ > .$<
-	@mv .$< $@
+		       {print $$1 x $$2}' $@ > .2$<
+	@mv .2$< $@; rm .1$<
 
 Font ?=5
 Cols ?=3
