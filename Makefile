@@ -78,3 +78,6 @@ CSVS=ls -r ~/gits/moot/optimize/*/*.csv | xargs -P 20 -I {} sh -c
 D ?=  ~/gits/moot/optimize/misc/auto93.csv
 all: ## run all the tests
 	lua ezr.lua --all $D
+
+tree: ## demo, tree generation
+	lua ezr.lua -S 40 --tree $D | bat -l csv
