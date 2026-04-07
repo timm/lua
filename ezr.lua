@@ -40,7 +40,7 @@ function Tree(fn_score)
 function Sym(s, n)
   return l.new(SYM, {txt=s or "", at=n or 0, has={}, n=0}) end
 
--- Constructor for numeric columns. goal=0 for minimize (-), 1 for maximize (+).
+-- Constructor for numeric columns. "-+" menas goal is 0,1 for minimze,maximize
 function Num(s, n)
   return l.new(NUM, {txt=s or "", at=n or 0, n=0, mu=0, m2=0,
                    goal=s and s:match"-$" and 0 or 1}) end
@@ -58,7 +58,7 @@ function Cols(ss_names,    xs,ys,all,col)
 function Data(src,    data)
   data = l.new(DATA, {rows={}, cols=nil, _mid=nil})
   if type(src)=="string" 
-  then for    row in l.things(src)     do add(data,row) end
+  then for    row in l.csv(src)     do add(data,row) end
   else for _, row in ipairs(src or {}) do add(data,row) end end
   return data end
 
@@ -77,8 +77,10 @@ function sub(i,v)
   return i:add(v,-1) end
 
 -- Bulk adds a list of values to a counter.
-function adds(vs,    num)
-  num=num or Num(); for _, v in ipairs(vs or {}) do add(num,v) end; return num end
+function adds(vs,  summary)
+  summary = summary or Num()
+  for _, v in ipairs(vs or {}) do add(summary,v) end
+  return summary end
 
 -- Updates mean and variance for numbers.
 function NUM._add(i,v,w,    err)
@@ -96,7 +98,8 @@ function SYM._add(i,v,w)
 
 -- Updates all columns with values from a row.
 function COLS._add(i,row,w) 
-  for _, col in ipairs(i.all) do add(col,row[col.at],w) end; return row end
+  for _, col in ipairs(i.all) do add(col,row[col.at],w) end
+  return row end
 
 -- Adds a row and updates column stats.
 function DATA._add(i,row,w)
@@ -105,8 +108,9 @@ function DATA._add(i,row,w)
        add(i.cols, row, w)
        if w>0 
        then l.push(i.rows,row) 
-       else for n, r in ipairs(i.rows) do 
-              if r==row then table.remove(i.rows,n); break end end end end end
+       else 
+         for n, r in ipairs(i.rows) do 
+           if r==row then table.remove(i.rows,n) break end end end end end
 
 -- ## Query <a name=query>
 
@@ -115,20 +119,22 @@ function NUM.mid(i) return i.mu end
 
 -- Mode for symbols.
 function SYM.mid(i,    most,mode)
-  most = -1; for v, n in pairs(i.has) do if n>most then most,mode=n,v end end
+  most = -1
+  for v, n in pairs(i.has) do if n>most then most,mode=n,v end end
   return mode end
 
 -- List of midpoints for all columns.
 function DATA.mid(i)
-  i._mid = i._mid or l.map(i.cols.all, function(col) return col:mid() end); return i._mid end
+  i._mid = i._mid or l.map(i.cols.all, function(col) return col:mid() end)
+  return i._mid end
 
 -- Standard deviation for numbers.
 function NUM.spread(i) 
   return i.n > 1 and (max(0,i.m2)/(i.n - 1))^0.5 or 0 end
 
 -- Entropy for symbols.
-function SYM.spread(i,    n) 
-  n=0; for _,v in pairs(i.has) do if v>0 then n=n-v/i.n*log(v/i.n,2) end end; return n end
+function SYM.spread(i,    fn) 
+  return - sum(i.has, function(v) return v/i.n * log(v/i.n, 2) end) end
 
 -- Sigmoid normalization.
 function NUM.norm(i,v,    sd)
@@ -143,9 +149,9 @@ function DATA.disty(i,row,    fn,err,n)
   return n==0 and 0 or (err/n)^(1/the.p) end
 
 -- Probability of winning against the median row.
-function wins(data,    vs_errs,lo,n_mid)
-  vs_errs = l.sort(l.map(data.rows, function(row) return data:disty(row) end))
-  lo, n_mid = vs_errs[1], vs_errs[#vs_errs//2+1]
+function wins(data,    ys,lo,n_mid)
+  ys = l.sort(l.map(data.rows, function(row) return data:disty(row) end))
+  lo, n_mid = ys[1], ys[#ys//2+1]
   return function(row) 
     return floor(100*(1 - ((data:disty(row)-lo) / (n_mid-lo+1e-32)))) end end
 
@@ -310,7 +316,7 @@ function l.o(x,       u)
 function l.thing(s) return s=="true" or (s~="false" and (tonumber(s) or s)) end
 
 -- Returns an iterator that yields parsed rows from a CSV file.
-function l.things(src,  f)
+function l.csv(src,  f)
   f = io.open(src)
   return function(      s,t)
     s = f:read()
@@ -340,7 +346,7 @@ eg["--all"] = function(arg,   ss)
     print("\n" .. k); randomseed(the.seed); eg[k](arg) end end
 
 -- Dump CSV.
-eg["--csv"] = function(f,   n) n=0; for r in l.things(f) do 
+eg["--csv"] = function(f,   n) n=0; for r in l.csv(f) do 
   if n%30==0 then print(l.o(r)) end; n=n+1 end end
 
 -- Synthetic distribution ranking.
@@ -380,7 +386,6 @@ eg["--test"] = function(src)
     test = l.slice(data.rows, n + 1)
     d2 = data:clone(l.slice(data.rows, 1, math.min(n, the.Budget)))
     f_dist  = function(r)   return d2:disty(r) end
-    -- Note: node must be defined before f_leaf is created
     node    = Tree(f_dist):build(d2, d2.rows)
     f_leaf  = function(a,b) return node:leaf(a).y:mid() < node:leaf(b).y:mid() end
     f_dist2 = function(a,b) return d2:disty(a) < d2:disty(b) end
