@@ -80,4 +80,4 @@ all: ## run all the tests
 	lua ezr.lua --all $D
 
 tree: ## demo, tree generation
-	lua ezr.lua -S 40 --tree $D | bat -l csv
+	lua ezr.lua -S 30 --tree $D | bat -l csv

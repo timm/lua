@@ -57,7 +57,8 @@ function Cols(ss_names,    xs,ys,all,col)
 -- Main data container for rows and summarized columns.
 function Data(src,    data)
   data = l.new(DATA, {rows={}, cols=nil, _mid=nil})
-  if type(src)=="string" then for row in l.things(src) do add(data,row) end
+  if type(src)=="string" 
+  then for    row in l.things(src)     do add(data,row) end
   else for _, row in ipairs(src or {}) do add(data,row) end end
   return data end
 
@@ -69,7 +70,7 @@ function DATA.clone(i,rows)
 
 -- Adds a value to a counter or a row to a dataset.
 function add(i,v,w) 
-  if v~="?" then i:add(v,w or 1) end; return v end
+  if v~="?" then i:_add(v,w or 1) end; return v end
 
 -- Removes a value (adds negative weight).
 function sub(i,v) 
@@ -80,27 +81,32 @@ function adds(vs,    num)
   num=num or Num(); for _, v in ipairs(vs or {}) do add(num,v) end; return num end
 
 -- Updates mean and variance for numbers.
-function NUM.add(i,v,w,    err)
+function NUM._add(i,v,w,    err)
   i.n = i.n + w
-  if w < 0 and i.n <= 2 then i.n, i.mu, i.m2 = 0, 0, 0
+  if w < 0 and i.n <= 2 
+  then i.n, i.mu, i.m2 = 0,0,0
   elseif i.n > 0 then
-    err=v-i.mu; i.mu=i.mu+w*err/i.n; i.m2=i.m2+w*err*(v-i.mu) end end
+    err  = v-i.mu
+    i.mu = i.mu+w*err/i.n
+    i.m2 = i.m2+w*err*(v-i.mu) end end
 
 -- Updates frequency counts for symbols.
-function SYM.add(i,v,w) 
+function SYM._add(i,v,w) 
   i.n = i.n + w; i.has[v] = (i.has[v] or 0) + w end
 
 -- Updates all columns with values from a row.
-function COLS.add(i,row,w) 
+function COLS._add(i,row,w) 
   for _, col in ipairs(i.all) do add(col,row[col.at],w) end; return row end
 
 -- Adds a row and updates column stats.
-function DATA.add(i,row,w)
-  if not i.cols then i.cols=Cols(row) else
-    i._mid=nil; i.cols:add(row,w)
-    if w>0 then l.push(i.rows,row) else
-      for n, r in ipairs(i.rows) do if r==row then table.remove(i.rows,n); break end end 
-    end end end
+function DATA._add(i,row,w)
+  if not i.cols then i.cols=Cols(row) 
+  else i._mid = nil
+       add(i.cols, row, w)
+       if w>0 
+       then l.push(i.rows,row) 
+       else for n, r in ipairs(i.rows) do 
+              if r==row then table.remove(i.rows,n); break end end end end end
 
 -- ## Query <a name=query>
 
@@ -182,7 +188,7 @@ function TREE.nodes(i,fn,lvl,pre)
 function TREE.show(i)
   i:nodes(function(node,lvl,pre)
     local p = lvl > 0 and string.rep("|   ", lvl-1)..pre or ""
-    io.write(l.fmt("%-"..the.Show.."s ,%4s ,(%3d),  %s\n",
+    io.write(l.fmt("%-"..the.Show.."s ,%5.2f ,(%3d),  %s\n",
       p, l.o(node.y:mid()), node.y.n, l.o(node.mids))) end) end 
 
 -- Partitions rows based on a test.
@@ -233,19 +239,18 @@ local function same(xs,ys,eps,    n,m,ngt,nlt,ks,fn)
  
 -- Groups results into top-tier ranks.
 -- Sorts treatments by median and groups them into ranks using the same() test.
-local function bestRanks(dict,     eps,names,rows,out,rank,num)
-  names, out = {}, {}
+local function bestRanks(dict)
+  local out,names,eps,rows = {},{}
   for k in pairs(dict) do l.push(names, k) end
   l.sort(names, function(a,b) return adds(dict[a]):mid() < adds(dict[b]):mid() end)
   eps = adds(dict[names[1]]):spread() * the.eps
   rows = dict[names[1]]
-  rank, out[1] = 1, adds(rows, Num(names[1], 1))
+  out[names[1]] = adds(rows, Num(names[1]))
   for n=2,#names do
-    if not same(rows, dict[names[n]], eps) then 
-      rank=rank+1
-      rows=dict[names[n]] end -- BAIL if different
-    out[1+#out] = adds(rows, Num(names[n], rank)) end
-  return out end
+    if   same(rows, dict[names[n]], eps) 
+    then out[names[n]] = adds(rows, Num(names[n])) 
+    else break end end
+  return out end 
 
 -- ## Library <a name=lib>
 
@@ -254,6 +259,13 @@ function l.new(kl,obj) kl.__index=kl; return setmetatable(obj,kl) end
 
 -- Appends an item to the end of a table and returns the added item.
 function l.push(t,x) t[1+#t]=x; return x end
+
+-- Dictionary to lists.
+function l.t2d(d,  u)
+  u={}; for _,x in pairs(d) do u[1+#u] = x end; return u end
+
+-- Return a sorter for lists of field x.
+function l.lt(x) return function(a,b) return a[x] < b[x] end end
 
 -- Sorts a table in-place using an optional comparator and returns the table.
 function l.sort(t,f) table.sort(t,f); return t end
@@ -286,12 +298,13 @@ function l.bisect(t,x,  lo,hi,m)
 l.fmt = string.format
 
 -- Recursively converts a value or table into a readable string representation.
-function l.o = function(x,       u) 
-  if type(x)~="table" then 
-    return type(x)=="float" and l.fmt("%.2f",x) or tostring(x) end
-  u={}; for k,v in pairs(x) do 
-           u[1+#u]=type(k)=="number" and l.o(v) or k.."="..l.o(v) end
-  return "{"..table.concat(l.sort(u),", ").."}" end
+function l.o(x,       u) 
+  if type(x) ~= "table" then 
+    return math.type(x) == "float" and string.format("%.2f", x) or tostring(x) end
+  u = {}
+  for k, v in pairs(x) do 
+    u[1 + #u] = type(k) == "number" and l.o(v) or k .. "=" .. l.o(v) end
+  return "{" .. table.concat(l.sort(u), ", ") .. "}" end
 
 -- Coerces a string into its most appropriate type: boolean, number, or string.
 function l.thing(s) return s=="true" or (s~="false" and (tonumber(s) or s)) end
@@ -333,41 +346,48 @@ eg["--csv"] = function(f,   n) n=0; for r in l.things(f) do
 -- Synthetic distribution ranking.
 -- Tests ranking logic by generating Weibull distributions.
 -- Generates and ranks 20 treatments using different distribution shapes.
-eg["--ranks"] = function(_,    dict,name,k,len,res)
+eg["--ranks"] = function(_,    dict,name,k,lambda,res)
   dict = {}
   for n=1,20 do
     name = "t"..n; dict[name] = {}
-    k,len = (n<=5 and 2 or 1), (n<=5 and 10 or 20)
-    for _=1,50 do l.push(dict[name], l.weibull(k,len)) end end
+    k,lambda = (n<=5 and 2 or 1), (n<=5 and 10 or 20)
+    for _ = 1,50 do l.push(dict[name], l.weibull(k,lambda)) end end
   print("\nTop Tier Treatments:")
-  res = bestRanks(dict)
-  l.sort(res, function(a,b) return a.at < b.at end)
-  for _,num in ipairs(res) do
-    print(l.fmt("  rank %-2s %-5s median: %s",     
-                num.at, num.txt, l.o(num:mid()))) end end
-      
+  u = l.sort(l.t2d(bestRanks(dict)), l.lt"mu")
+  for _,num in ipairs(u) do
+    print(l.fmt("%-5s median: %5.2f", num.txt, num:mid())) end end
+     
 -- Column midpoints.
 eg["--data"] = function(f,   d) d=Data(f); for _,c in ipairs(d.cols.y) do 
   print(c.txt, l.o(c:mid())) end end
 
 -- Display tree.
-eg["--tree"] = function(f,   d,rs) d=Data(f); rs=l.many(d.rows, the.Budget); d=d:clone(rs)
+eg["--tree"] = function(f,   d,rs) 
+  d  = Data(f)
+  rs = l.many(d.rows, the.Budget)
+  d  = d:clone(rs)
   Tree(function(r) return d:disty(r) end):build(d, d.rows):show() end
 
 -- Full optimization validation.
-eg["--test"] = function(f,   d,outs,fw,n,ts,d2,node,top,fy,fs)
-  d = Data(f); outs = Num("win"); fw = wins(d)
+eg["--test"] = function(src)
+  local data,stats,fn_win,n,test,d2,node,top,f_dist,f_leaf,f_dist2
+  data = Data(src); stats = Num("win")
+  if not data.cols then return end 
+  fn_win = wins(data) 
   for _ = 1, 20 do
-    l.shuffle(d.rows)
-    n = #d.rows // 2
-    ts = l.slice(d.rows, n + 1)
-    d2 = d:clone(l.slice(d.rows, 1, min(n, the.Budget)))
-    node = Tree(function(r) return d2:disty(r) end):build(d2, d2.rows)
-    l.sort(ts, function(a,b) return node:leaf(a).y:mid() < node:leaf(b).y:mid() end)
-    top = l.sort(l.slice(ts, 1, the.Check), function(a,b) 
-      return d2:disty(a) < d2:disty(b) end)
-    add(outs, fw(top[1])) end
-  print(l.o(floor(outs:mid()))) end
+    l.shuffle(data.rows)
+    n = #data.rows // 2
+    test = l.slice(data.rows, n + 1)
+    d2 = data:clone(l.slice(data.rows, 1, math.min(n, the.Budget)))
+    f_dist  = function(r)   return d2:disty(r) end
+    -- Note: node must be defined before f_leaf is created
+    node    = Tree(f_dist):build(d2, d2.rows)
+    f_leaf  = function(a,b) return node:leaf(a).y:mid() < node:leaf(b).y:mid() end
+    f_dist2 = function(a,b) return d2:disty(a) < d2:disty(b) end
+    l.sort(test, f_leaf)
+    top = l.sort(l.slice(test, 1, the.Check), f_dist2)
+    add(stats, fn_win(top[1])) end
+  print(l.o(math.floor(stats:mid()))) end
 
 -- ## Main <a name=main>
 
