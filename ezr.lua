@@ -40,10 +40,10 @@ function Tree(fn_score)
 function Sym(s, n)
   return l.new(SYM, {txt=s or "", at=n or 0, has={}, n=0}) end
 
--- Constructor for numeric columns. "-+" menas goal is 0,1 for minimze,maximize
+-- Constructor for numerics. "-+" menas heaven = 0,1 for minimze,maximize
 function Num(s, n)
   return l.new(NUM, {txt=s or "", at=n or 0, n=0, mu=0, m2=0,
-                   goal=s and s:match"-$" and 0 or 1}) end
+                     heaven=s and s:match"-$" and 0 or 1}) end
 
 -- Processes a list of names into specific column roles (Num or Sym).
 function Cols(ss_names,    xs,ys,all,col)
@@ -58,7 +58,7 @@ function Cols(ss_names,    xs,ys,all,col)
 function Data(src,    data)
   data = l.new(DATA, {rows={}, cols=nil, _mid=nil})
   if type(src)=="string" 
-  then for    row in l.csv(src)     do add(data,row) end
+  then for    row in l.csv(src)        do add(data,row) end
   else for _, row in ipairs(src or {}) do add(data,row) end end
   return data end
 
@@ -68,33 +68,31 @@ function DATA.clone(i,rows)
 
 -- ## Update <a name=update>
 
--- Adds a value to a counter or a row to a dataset.
-function add(i,v,w) 
-  if v~="?" then i:_add(v,w or 1) end; return v end
+-- Removes a value is just adding with -`.
+function sub(i,v) return i:add(v,-1) end
 
--- Removes a value (adds negative weight).
-function sub(i,v) 
-  return i:add(v,-1) end
-
--- Bulk adds a list of values to a counter.
+-- Bulk adds a list of values to some summary object (defaults to Num()).
 function adds(vs,  summary)
   summary = summary or Num()
   for _, v in ipairs(vs or {}) do add(summary,v) end
   return summary end
 
+-- Adds a value to a counter or a row to a dataset.
+function add(i,v,w) 
+  if v~="?" then i:_add(v,w or 1) end; return v end
+
 -- Updates mean and variance for numbers.
 function NUM._add(i,v,w,    err)
   i.n = i.n + w
-  if w < 0 and i.n <= 2 
+  if w < 0 and i.n <= 1
   then i.n, i.mu, i.m2 = 0,0,0
-  elseif i.n > 0 then
+  else
     err  = v-i.mu
-    i.mu = i.mu+w*err/i.n
-    i.m2 = i.m2+w*err*(v-i.mu) end end
+    i.mu = i.mu + w * err/i.n
+    i.m2 = i.m2 + w * err*(v-i.mu) end end
 
 -- Updates frequency counts for symbols.
-function SYM._add(i,v,w) 
-  i.n = i.n + w; i.has[v] = (i.has[v] or 0) + w end
+function SYM._add(i,v,w) i.has[v] = w + (i.has[v] or 0) end
 
 -- Updates all columns with values from a row.
 function COLS._add(i,row,w) 
@@ -128,25 +126,24 @@ function DATA.mid(i)
   i._mid = i._mid or l.map(i.cols.all, function(col) return col:mid() end)
   return i._mid end
 
--- Standard deviation for numbers.
+-- Spread for numbers: standard deviation
 function NUM.spread(i) 
   return i.n > 1 and (max(0,i.m2)/(i.n - 1))^0.5 or 0 end
 
--- Entropy for symbols.
+-- Entropy for symbols: sum -p*log(p)
 function SYM.spread(i,    fn) 
   return - sum(i.has, function(v) return v/i.n * log(v/i.n, 2) end) end
 
 -- Sigmoid normalization.
 function NUM.norm(i,v,    sd)
   if v=="?" then return v end
-  sd = i:spread() + 1e-32; return 1/(1 + exp(-1.7*(v - i.mu)/sd)) end
+  z = (v - i.mu) / (spread() + 1e-32)
+  return 1/(1 + exp(-1.7*l.crop(z,-3,3))) end
 
 -- Minkowski distance to ideal goal.
-function DATA.disty(i,row,    fn,err,n)
-  fn = function(col) return abs(col:norm(row[col.at]) - col.goal) end
-  err, n = 0, 0
-  for _, x in ipairs(l.map(i.cols.y, fn)) do n=n+1; err=err+x^the.p end
-  return n==0 and 0 or (err/n)^(1/the.p) end
+function DATA.disty(i,row,    fn)
+  fn = function(col) return abs(col:norm(row[col.at]) - col.heaven)^the.p end
+  return (sum(i.cols.y,fn) / #i.cols.y) ^ (1/the.p) end
 
 -- Probability of winning against the median row.
 function wins(data,    ys,lo,n_mid)
@@ -262,6 +259,9 @@ local function bestRanks(dict)
 
 -- Sets the metatable index for a new object to enable polymorphism.
 function l.new(kl,obj) kl.__index=kl; return setmetatable(obj,kl) end
+
+-- Crop number into range lo...hi
+function l.crop(n,lo,hi) return max(lo, min(hi,n)) emd
 
 -- Appends an item to the end of a table and returns the added item.
 function l.push(t,x) t[1+#t]=x; return x end
