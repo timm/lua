@@ -49,14 +49,9 @@ $(HTML)/%.html: %.lua $I/etc/top.html
 	@echo "Generating doco for $<"
 	@pycco -d $(HTML) $<
 	@cat $I/etc/my.css >> $(HTML)/pycco.css
-	@(echo "<p>"; gawk ' \
-		/id=/ {for(i=1;i<=NF;i++) if($$i~/id=/) {split($$i,a,/[="'\'']/); d=a[2]}} \
-		/<h2>/ {gsub(/<[^>]*>/,"",$$0); printf " <a href=\"#%s\">%s</a> |", d, $$1}' \
-		$@ | sed 's/|$$//' ; echo "</p><hr><h1>") > .1$<
-	@gawk -v x="$$(cat $I/etc/top.html .1$<)" \
-		'BEGIN {FS="<h1>"; RS="_jqz9v"} \
-		       {print $$1 x $$2}' $@ > .2$<
-	@mv .2$< $@; rm .1$<
+	@gawk -v x="$$(cat $I/etc/top.html)" \
+		'BEGIN {FS="<h1>"; RS="_jqz9v"} {print $$1 x "<h1>" $$2}' $@ > .$<
+	@mv .$< $@
 
 Font ?=5
 Cols ?=3

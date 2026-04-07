@@ -1,7 +1,4 @@
 #!/usr/bin/env lua
--- ezr3.lua : explainable multi-objective optimization  
--- (c) 2026, Tim Menzies <timm@ieee.org>, MIT license   
-    
 local the, help = {}, [[   
     
 ezr3.lua : explainable multi-objective optimization
@@ -19,9 +16,9 @@ ezr3.lua : explainable multi-objective optimization
   -h               show help
 ]]
 
--- ## Registry & Forward Declarations
+-- ## Registry & Forward Declarations <a name=registry>
 
--- `l` is for misc library fuctnions
+-- `l` is for misc library functions
 local l = {} 
 -- Types and constructors
 local NUM, SYM, COLS, DATA, TREE = {}, {}, {}, {}, {} 
@@ -33,7 +30,7 @@ local add, sub, adds, mink, wins, split, same, bestRanks
 local abs,min,max,log,exp = math.abs,math.min,math.max,math.log,math.exp
 local floor,rand,randomseed = math.floor, math.random, math.randomseed
 
--- ## Structs
+-- ## Structs <a name=structs>
 
 -- Constructor for a tree node with a scoring function.
 function Tree(fn_score)
@@ -68,7 +65,7 @@ function Data(src,    data)
 function DATA.clone(i,rows)
   return adds(rows or {}, Data({i.cols.names})) end
 
--- ## Update
+-- ## Update <a name=update>
 
 -- Adds a value to a counter or a row to a dataset.
 function add(i,v,w) 
@@ -105,7 +102,7 @@ function DATA.add(i,row,w)
       for n, r in ipairs(i.rows) do if r==row then table.remove(i.rows,n); break end end 
     end end end
 
--- ## Query
+-- ## Query <a name=query>
 
 -- Mean for numbers.
 function NUM.mid(i) return i.mu end
@@ -146,7 +143,7 @@ function wins(data,    vs_errs,lo,n_mid)
   return function(row) 
     return floor(100*(1 - ((data:disty(row)-lo) / (n_mid-lo+1e-32)))) end end
 
--- ## Tree
+-- ## Tree <a name=tree>
 
 -- Builds variance-minimizing tree.
 function TREE.build(i,data,rows,    mid,best,bestW,w)
@@ -179,14 +176,14 @@ function TREE.nodes(i,fn,lvl,pre)
   local nds = l.sort({{i.left,sy},{i.right,sn}}, 
                      function(a,b) return a[1].y:mid() < b[1].y:mid() end)
   for _, p in ipairs(nds) do 
-    p[1]:nodes(fn, lvl+1, i.col.txt.." "..p[2].." "..l.rat(i.cut)) end end
+    p[1]:nodes(fn, lvl+1, i.col.txt.." "..p[2].." "..l.o(i.cut)) end end
 
 -- Prints tree to console.
 function TREE.show(i)
   i:nodes(function(node,lvl,pre)
     local p = lvl > 0 and string.rep("|   ", lvl-1)..pre or ""
-    io.write(string.format("%-"..the.Show.."s ,%4s ,(%3d),  %s\n",
-      p, l.rat(node.y:mid()), node.y.n, l.rat(node.mids))) end) end
+    io.write(l.fmt("%-"..the.Show.."s ,%4s ,(%3d),  %s\n",
+      p, l.o(node.y:mid()), node.y.n, l.o(node.mids))) end) end
 
 -- Partitions rows based on a test.
 function split(col,rows,fn,cut,test,    lhs,rhs,L,R,ok)
@@ -213,11 +210,9 @@ function SYM.splits(i,rows,fn,    seen,out,cut)
       seen[v], cut = true, split(i, rows, fn, v, function(x) return x==v end)
       if cut then l.push(out, cut) end end end; return out end
 
--- ## Stats
+-- ## Stats <a name=stats>
 
 -- Non-parametric comparison.
--- ## query -------------------------------------------------------------------
-
 -- Checks if two distributions are the same using Cliffs Delta and KS test.
 local function same(xs,ys,eps,    n,m,ngt,nlt,ks,fn)
   xs,ys = l.sort(xs), l.sort(ys)
@@ -237,8 +232,6 @@ local function same(xs,ys,eps,    n,m,ngt,nlt,ks,fn)
   return ks <= the.ksconf * ((n+m)/(n*m))^0.5 end -- KS test
  
 -- Groups results into top-tier ranks.
--- ## query -------------------------------------------------------------------
-
 -- Sorts treatments by median and groups them into ranks using the same() test.
 local function bestRanks(dict,    names,eps,rows,out,rank,num)
   names, out = {}, {}
@@ -254,9 +247,9 @@ local function bestRanks(dict,    names,eps,rows,out,rank,num)
     out[1+#out] = adds(rows, Num(names[n], rank)) end
   return out end
 
--- ## Library
+-- ## Library <a name=lib>
 
--- Sets the metatable index for a new object to enable polymorhism.
+-- Sets the metatable index for a new object to enable polymorphism.
 function l.new(kl,obj) kl.__index=kl; return setmetatable(obj,kl) end
 
 -- Appends an item to the end of a table and returns the added item.
@@ -290,14 +283,14 @@ function l.bisect(t,x,  lo,hi,m)
     m=(lo+hi)//2; if t[m]<=x then lo=m+1 else hi=m-1 end 
   end; return lo-1 end
 
+l.fmt = string.format
+
 -- Recursively converts a value or table into a readable string representation.
-function l.rat(x)
+function l.o = function(x,       u) 
   if type(x)~="table" then 
-    return type(x)=="float" and string.format("%.2f",x) or tostring(x) 
-  end
-  local u={}; for k,v in pairs(x) do 
-    u[1+#u]=type(k)=="number" and l.rat(v) or k.."="..l.rat(v) 
-  end
+    return type(x)=="float" and l.fmt("%.2f",x) or tostring(x) end
+  u={}; for k,v in pairs(x) do 
+           u[1+#u]=type(k)=="number" and l.o(v) or k.."="..l.o(v) end
   return "{"..table.concat(l.sort(u),", ").."}" end
 
 -- Coerces a string into its most appropriate type: boolean, number, or string.
@@ -317,14 +310,14 @@ function l.things(src,  f)
 -- Generates a random variable following the Weibull distribution.
 function l.weibull(k, lambda) return lambda * (-log(1 - rand()))^(1/k) end
 
--- ## Eg (Examples)
+-- ## Eg (Examples) <a name=eg>
 local eg = {}
 
 -- Show help string.
-eg["-h"] = function() print(help) end
+eg["-h"] = function(_) print(help) end
 
 -- Show config.
-eg["--the"] = function() print(l.rat(the)) end
+eg["--the"] = function(_) print(l.o(the)) end
 
 -- Master test runner.
 eg["--all"] = function(arg,   ss)
@@ -335,16 +328,12 @@ eg["--all"] = function(arg,   ss)
 
 -- Dump CSV.
 eg["--csv"] = function(f,   n) n=0; for r in l.things(f) do 
-  if n%30==0 then print(l.rat(r)) end; n=n+1 end end
+  if n%30==0 then print(l.o(r)) end; n=n+1 end end
 
 -- Synthetic distribution ranking.
--- ## query -------------------------------------------------------------------
-
 -- Tests ranking logic by generating Weibull distributions.
--- ## query -------------------------------------------------------------------
-
 -- Generates and ranks 20 treatments using different distribution shapes.
-eg["--ranks"] = function(    dict,name,k,len,res)
+eg["--ranks"] = function(_,    dict,name,k,len,res)
   dict = {}
   for n=1,20 do
     name = "t"..n; dict[name] = {}
@@ -354,13 +343,12 @@ eg["--ranks"] = function(    dict,name,k,len,res)
   res = bestRanks(dict)
   l.sort(res, function(a,b) return a.at < b.at end)
   for _,num in ipairs(res) do
-    print(string.format("  rank %-2s %-5s median: %s",     
-                         num.at, num.txt, l.rat(num:mid()))) end end
-
+    print(l.fmt("  rank %-2s %-5s median: %s",     
+                num.at, num.txt, l.o(num:mid()))) end end
       
 -- Column midpoints.
 eg["--data"] = function(f,   d) d=Data(f); for _,c in ipairs(d.cols.y) do 
-  print(c.txt, l.rat(c:mid())) end end
+  print(c.txt, l.o(c:mid())) end end
 
 -- Display tree.
 eg["--tree"] = function(f,   d,rs) d=Data(f); rs=l.many(d.rows, the.Budget); d=d:clone(rs)
@@ -370,31 +358,33 @@ eg["--tree"] = function(f,   d,rs) d=Data(f); rs=l.many(d.rows, the.Budget); d=d
 eg["--test"] = function(f,   d,outs,fw,n,ts,d2,node,top,fy,fs)
   d = Data(f); outs = Num("win"); fw = wins(d)
   for _ = 1, 20 do
-    l.shuffle(d.rows); n = #d.rows // 2; ts = l.slice(d.rows, n + 1)
+    l.shuffle(d.rows)
+    n = #d.rows // 2
+    ts = l.slice(d.rows, n + 1)
     d2 = d:clone(l.slice(d.rows, 1, min(n, the.Budget)))
     node = Tree(function(r) return d2:disty(r) end):build(d2, d2.rows)
     l.sort(ts, function(a,b) return node:leaf(a).y:mid() < node:leaf(b).y:mid() end)
     top = l.sort(l.slice(ts, 1, the.Check), function(a,b) 
       return d2:disty(a) < d2:disty(b) end)
     add(outs, fw(top[1])) end
-  print(l.rat(floor(outs:mid()))) end
+  print(l.o(floor(outs:mid()))) end
 
--- ## Main
+-- ## Main <a name=main>
 
 -- Use the `help` text to fill in `the`.
 for k,v in help:gmatch("([%w_]+)%s*=%s*([^%s]+)") do the[k]=l.thing(v) end
 
---  Cli contents either call `eg` functions or reset cotnents of `the`.
+--  Cli contents either call `eg` functions or reset contents of `the`.
 local function main(   k,v,n)
-  n=1; while n <= #arg do
-    k,v = arg[n], arg[n+1]
-    n   = n + 1
+  n = 1
+  while n <= #arg do
+    n, k,v = n + 1, arg[n], arg[n+1]
     if eg[k] then 
       randomseed(the.seed)
       eg[k](v and l.thing(v) or nil)
       if v and not eg[v] then n=n+1 end
     else 
-      for k1,v1 in pairs(the) do 
+      for k1 in pairs(the) do 
         if k=="-"..k1:sub(1,1) then 
           the[k1] = l.thing(v)
           n=n+1 end end end end end
