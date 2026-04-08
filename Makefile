@@ -50,7 +50,7 @@ $(HTML)/%.html: %.lua $I/etc/top.html
 	@pycco -d $(HTML) $<
 	@cat $I/etc/my.css >> $(HTML)/pycco.css
 	@gawk -v x="$$(cat $I/etc/top.html)" \
-		'BEGIN {FS="<h1>"; RS="_jqz9v"} {print $$1 x "<h1>" $$2}' $@ > .$<
+    'BEGIN {FS="<h1>"; RS="^$$"} {print $$1 x "<h1>" $$2}' $@ > .$<
 	@mv .$< $@
 
 Font ?=5
