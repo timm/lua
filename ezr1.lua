@@ -29,30 +29,29 @@ local add, sub, adds, mink, wins, split, same, bestRanks
 -- Maths
 local abs,min,max,log,exp = math.abs,math.min,math.max,math.log,math.exp
 local floor,rand,randomseed = math.floor, math.random, math.randomseed
+local sqrt = math.sqrt
 
 -- ## Structs <a name=structs>
 
 -- Constructor for a tree node with a scoring function.
-function Tree(fn_score)
-  return l.new(TREE, {score=fn_score}) end
+function Tree(fn_score) return l.new(TREE, {score=fn_score}) end
 
 -- Constructor for symbolic (categorical) columns.
-function Sym(s, n)
-  return l.new(SYM, {txt=s or "", at=n or 0, has={}, n=0}) end
+function Sym(s, n) return l.new(SYM, {txt=s or "", at=n or 0, has={}, n=0}) end
 
 -- Constructor for numerics. "-+" menas heaven = 0,1 for minimze,maximize
-function Num(s, n)
-  return l.new(NUM, {txt=s or "", at=n or 0, n=0, mu=0, m2=0,
-                     heaven=s and s:match"-$" and 0 or 1}) end
+function Num(s, n) return l.new(NUM, {txt=s or "", at=n or 0, n=0, mu=0, m2=0,
+                                heaven=s and s:match"-$" and 0 or 1}) end
 
 -- Processes a list of names into specific column roles (Num or Sym).
-function Cols(ss_names,    xs,ys,all,col)
+function Cols(ss_names,    xs,ys,all,col,klass)
   xs, ys, all = {}, {}, {}
   for n, s in ipairs(ss_names) do
     col = l.push(all, (s:match"^[A-Z]" and Num or Sym)(s, n))
+    if s:match"!$" then klass=col end
     if not s:match"X$" then 
       l.push(s:match"[%+%-!]$" and ys or xs, col) end end
-  return l.new(COLS, {x=xs, y=ys, all=all, names=ss_names}) end
+  return l.new(COLS, {x=xs, y=ys, all=all, klass=klass, names=ss_names}) end
 
 -- Main data container for rows and summarized columns.
 function Data(src,    data)
@@ -63,8 +62,7 @@ function Data(src,    data)
   return data end
 
 -- Returns a new Data object with the same structure as the original.
-function DATA.clone(i,rows)
-  return adds(rows or {}, Data({i.cols.names})) end
+function DATA.clone(i,rows) return adds(rows or {}, Data({i.cols.names})) end
 
 -- ## Update <a name=update>
 
@@ -84,12 +82,11 @@ function add(i,v,w)
 -- Updates mean and variance for numbers.
 function NUM._add(i,v,w,    err)
   i.n = i.n + w
-  if w < 0 and i.n <= 1
-  then i.n, i.mu, i.m2 = 0,0,0
-  else
-    err  = v-i.mu
-    i.mu = i.mu + w * err/i.n
-    i.m2 = i.m2 + w * err*(v-i.mu) end end
+  if    w < 0 and i.n <= 1
+  then  i.n, i.mu, i.m2 = 0,0,0
+  else  err  = v-i.mu
+        i.mu = i.mu + w * err/i.n
+        i.m2 = i.m2 + w * err*(v-i.mu) end end
 
 -- Updates frequency counts for symbols.
 function SYM._add(i,v,w) i.has[v] = w + (i.has[v] or 0) end
@@ -128,7 +125,7 @@ function DATA.mid(i)
 
 -- Spread for numbers: standard deviation
 function NUM.spread(i) 
-  return i.n > 1 and (max(0,i.m2)/(i.n - 1))^0.5 or 0 end
+  return i.n > 1 and sqrt(max(0,i.m2)/(i.n - 1)) or 0 end
 
 -- Entropy for symbols: sum -p*log(p)
 function SYM.spread(i,    fn) 
@@ -138,7 +135,7 @@ function SYM.spread(i,    fn)
 function NUM.norm(i,v,    sd)
   if v=="?" then return v end
   z = (v - i.mu) / (i:spread() + 1e-32)
-  return 1/(1 + exp(-1.7*l.crop(z,-3,3))) end
+  return 1 / (1 + exp(-1.7 * l.crop(z, -3, 3))) end
 
 -- Minkowski distance to ideal goal.
 function DATA.disty(i,row,    fn)
@@ -155,10 +152,11 @@ function wins(data,    ys,lo,n_mid)
 -- ## Tree <a name=tree>
 
 -- Builds variance-minimizing tree.
-function TREE.build(i,data,rows,    mid,best,bestW,w)
-  mid, i.y = data:clone(rows):mid(), adds(l.map(rows, function(r) return i.score(r) end))
-  i.mids = l.kv(data.cols.y, function(c) return c.txt end, function(c) return mid[c.at] end)
-  if #rows < 2*the.leaf then return i end; best, bestW = nil, 1E32
+function TREE.build(i,data,rows,    best,bestW,w)
+  i.y    = adds(l.map(rows, i.score))
+  i.mids = {}; for _,col in pairs(data.cols.y) do i.mids[col.txt] = col:mid() end
+  if #rows < 2 * the.leaf then return i end
+  best, bestW = nil, 1E32
   for _, col in ipairs(data.cols.x) do
     for _, cut in ipairs(col:splits(rows, i.score)) do
       w = cut.lhs.n * cut.lhs:spread() + cut.rhs.n * cut.rhs:spread()
@@ -167,46 +165,16 @@ function TREE.build(i,data,rows,    mid,best,bestW,w)
   if best then
     i.col, i.cut, i.at = best.col, best.cut, best.col.at
     i.left, i.right = Tree(i.score):build(data, best.left), 
-                      Tree(i.score):build(data, best.right) 
-  end; return i end
-
--- Traverses tree to find the relevant leaf for a row.
-function TREE.leaf(i,row,    v)
-  if not i.col then return i end; v = row[i.at]
-  if v=="?" then return i.left:leaf(row) end
-  local ok = i.col.mu and (v <= i.cut) or (v == i.cut)
-  return (ok and i.left or i.right):leaf(row) end
-
--- Recursive visitor for nodes.
-function TREE.nodes(i,fn,lvl,pre)
-  lvl, pre = lvl or 0, pre or ""; fn(i,lvl,pre)
-  if not i.col then return end
-  local sy, sn = i.col.mu and "<=" or "==", i.col.mu and ">" or "!="
-  local nds = l.sort({{i.left,sy},{i.right,sn}}, 
-                     function(a,b) return a[1].y:mid() < b[1].y:mid() end)
-  for _, p in ipairs(nds) do 
-    p[1]:nodes(fn, lvl+1, i.col.txt.." "..p[2].." "..l.o(i.cut)) end end
-
--- Prints tree to console.
-function TREE.show(i)
-  i:nodes(function(node,lvl,pre)
-    local p = lvl > 0 and string.rep("|   ", lvl-1)..pre or ""
-    io.write(l.fmt("%-"..the.Show.."s ,%5.2f ,(%3d),  %s\n",
-      p, l.o(node.y:mid()), node.y.n, l.o(node.mids))) end) end 
-
--- Partitions rows based on a test.
-function split(col,rows,fn,cut,test,    lhs,rhs,L,R,ok)
-  lhs, rhs, L, R = Num(), Num(), {}, {}
-  for _, row in ipairs(rows) do
-    ok = row[col.at]=="?" or test(row[col.at])
-    l.push(ok and L or R, row); add(ok and lhs or rhs, fn(row)) end
-  if #L >= the.leaf and #R >= the.leaf then
-    return {col=col, cut=cut, left=L, right=R, lhs=lhs, rhs=rhs} end end
+                      Tree(i.score):build(data, best.right) end
+  return i end
 
 -- Numeric splits based on median.
 function NUM.splits(i,rows,fn,    vs,mu,cut)
-  vs = {}; for _, r in ipairs(rows) do if r[i.at]~="?" then l.push(vs, r[i.at]) end end
-  if #vs < 2 then return {} end; l.sort(vs); mu = vs[#vs//2+1]
+  vs = {}
+  for _, r in ipairs(rows) do if r[i.at]~="?" then l.push(vs, r[i.at]) end end
+  if #vs < 2 then return {} end
+  l.sort(vs)
+  mu = vs[#vs//2+1]
   cut = split(i, rows, fn, mu, function(v) return v<=mu end)
   return cut and {cut} or {} end
 
@@ -218,6 +186,43 @@ function SYM.splits(i,rows,fn,    seen,out,cut)
     if v~="?" and not seen[v] then
       seen[v], cut = true, split(i, rows, fn, v, function(x) return x==v end)
       if cut then l.push(out, cut) end end end; return out end
+
+-- Partitions rows based on a test.
+function split(col,rows,fn,cut,test,    lhs,rhs,L,R,ok)
+  lhs, rhs, L, R = Num(), Num(), {}, {}
+  for _, row in ipairs(rows) do
+    ok = row[col.at]=="?" or test(row[col.at])
+    l.push(ok and L or R, row)
+    add(ok and lhs or rhs, fn(row)) end
+  if #L >= the.leaf and #R >= the.leaf then
+    return {col=col, cut=cut, left=L, right=R, lhs=lhs, rhs=rhs} end end
+
+-- Traverses tree to find the relevant leaf for a row.
+function TREE.leaf(i,row,    v,ok)
+  if not i.col then return i end; v = row[i.at]
+  if v=="?" then return i.left:leaf(row) end
+  ok = i.col.mu and (v <= i.cut) or (v == i.cut)
+  return (ok and i.left or i.right):leaf(row) end
+
+-- Recursive visitor for nodes.
+function TREE.nodes(i,fn,lvl,pre,  s1,s2,n)
+  lvl = lvl or 0
+  pre = fn(i,lvl,pre)
+  if i.col then 
+    s1 = i.col.mu and "<=" or "=="
+    s2 = i.col.mu and ">"  or "!="
+    if i.left.y:mid() < i.right.y:mid() 
+    then n = {{i.left, s1}, {i.right, s2}}
+    else n = {{i.right, s2}, {i.left, s1}} end
+    for _, p in ipairs(n) do
+      p[1]:nodes(fn, lvl+1, i.col.txt.." "..p[2].." "..l.o(i.cut)) end end end
+
+-- Prints tree to console.
+function TREE.show(i)
+  i:nodes(function(node,lvl,pre)
+    local p = lvl > 0 and string.rep("|   ", lvl-1)..pre or ""
+    io.write(l.fmt("%-"..the.Show.."s ,%5.2f ,(%3d),  %s\n",
+      p, l.o(node.y:mid()), node.y.n, l.o(node.mids))) end) end 
 
 -- ## Stats <a name=stats>
 
@@ -238,7 +243,7 @@ local function same(xs,ys,eps,    n,m,ngt,nlt,ks,fn)
   ks,fn = 0, function(v) return abs(l.bisect(xs,v)/n - l.bisect(ys,v)/m) end
   for _,v in ipairs(xs) do ks = max(ks, fn(v)) end
   for _,v in ipairs(ys) do ks = max(ks, fn(v)) end
-  return ks <= the.ksconf * ((n+m)/(n*m))^0.5 end -- KS test
+  return ks <= the.ksconf * sqrt((n+m)/(n*m)) end -- KS test
  
 -- Groups results into top-tier ranks.
 -- Sorts treatments by median and groups them into ranks using the same() test.
@@ -283,10 +288,6 @@ function l.sum(t,f,  n)
 -- Transforms a table by applying a function to each element.
 function l.map(t,f,  u) 
   u={}; for i,x in ipairs(t) do u[i]=f(x) end; return u end
-
--- Creates a new table by applying key and value transformation functions.
-function l.kv(t,fk,fv,  u) 
-  u={}; for _,x in ipairs(t) do u[fk(x)]=fv(x) end; return u end
 
 -- Returns a subset of a table from index lo to hi.
 function l.slice(t,lo,hi,  u) 
@@ -378,43 +379,28 @@ eg["--tree"] = function(f,   d,rs)
   d  = d:clone(rs)
   Tree(function(r) return d:disty(r) end):build(d, d.rows):show() end
 
--- Full optimization validation.
-eg["--test1"] = function(src)
-  local data,stats,fn_win,n,test,d2,node,top,f_dist,f_leaf,f_dist2
-  data = Data(src); stats = Num("win")
-  if not data.cols then return end 
-  fn_win = wins(data) 
+local function _gate(data,fn_win,  n,test,d2,node,top)
   l.shuffle(data.rows)
   n = #data.rows // 2
-  test = l.slice(data.rows, n + 1)
+  test = l.slice(data.rows, n+1)
   d2 = data:clone(l.slice(data.rows, 1, math.min(n, the.Budget)))
-  f_dist  = function(r)   return d2:disty(r) end
-  node    = Tree(f_dist):build(d2, d2.rows)
-  f_leaf  = function(a,b) return node:leaf(a).y:mid() < node:leaf(b).y:mid() end
-  f_dist2 = function(a,b) return d2:disty(a) < d2:disty(b) end
-  l.sort(test, f_leaf)
-  top = l.sort(l.slice(test, 1, the.Check), f_dist2)
-  print(the.Budget, the.Check, fn_win(top[1])) end
+  node = Tree( function(r) return d2:disty(r) end):build(d2, d2.rows)
+  l.sort(test, function(a,b) return node:leaf(a).y:mid() < node:leaf(b).y:mid() end)
+  top = l.sort(l.slice(test, 1, the.Check),      
+               function(a,b) return d2:disty(a) < d2:disty(b) end)
+  return fn_win(top[1]) end
 
--- Full optimization validation.
-eg["--test"] = function(src)
-  local data,stats,fn_win,n,test,d2,node,top,f_dist,f_leaf,f_dist2
+eg["--test1"] = function(src,   data)
+  data = Data(src)
+  if data.cols then
+    print(the.Budget, the.Check, _gate(data, wins(data))) end end
+
+eg["--test"] = function(src,  data,stats,fn_win)
   data = Data(src); stats = Num("win")
-  if not data.cols then return end 
-  fn_win = wins(data) 
-  for _ = 1, 20 do
-    l.shuffle(data.rows)
-    n = #data.rows // 2
-    test = l.slice(data.rows, n + 1)
-    d2 = data:clone(l.slice(data.rows, 1, math.min(n, the.Budget)))
-    f_dist  = function(r)   return d2:disty(r) end
-    node    = Tree(f_dist):build(d2, d2.rows)
-    f_leaf  = function(a,b) return node:leaf(a).y:mid() < node:leaf(b).y:mid() end
-    f_dist2 = function(a,b) return d2:disty(a) < d2:disty(b) end
-    l.sort(test, f_leaf)
-    top = l.sort(l.slice(test, 1, the.Check), f_dist2)
-    add(stats, fn_win(top[1])) end
-  print(l.o(math.floor(stats:mid()))) end
+  if data.cols then
+    fn_win = wins(data)
+    for _ = 1, 20 do add(stats, _gate(data, fn_win)) end
+    print(l.o(math.floor(stats:mid()))) end end
 
 -- ## Main <a name=main>
 
