@@ -56,6 +56,15 @@ $(HTML)/%.html: %.lua $I/etc/top.html
 Font ?=5
 Cols ?=3
 
+~/tmp/%.pdf : %.let Makefile $I/etc/let.ssh
+	@echo "pdfing : $@ ... "
+	@a2ps -Bj --landscape --line-numbers=1 --highlight-level=normal \
+		--borders=no --pro=color --right-footer="" --left-footer=""  \
+		--pretty-print=$I/etc/let.ssh --footer="page %p." -M letter \
+		--font-size=$(Font) --columns $(Cols) \
+		-o - $< | ps2pdf - $@
+	open $@
+
 ~/tmp/%.pdf : %.lua Makefile $I/etc/lua.ssh
 	@echo "pdfing : $@ ... "
 	@a2ps -Bj --landscape --line-numbers=1 --highlight-level=normal \

@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>50 Tiny Lua Snippets to Boost Your Productivity</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/lua.min.js"></script>
+<style>
+  :root {
+    --bg: #1e1e1e;
+    --card: #282828;
+    --accent: #7daea3;
+    --text: #d4be98;
+    --muted: #928374;
+    --lesson-bg: #32302f;
+    --border: #7daea3;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'IBM Plex Mono', 'Menlo', monospace;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    padding: 2rem 1rem;
+  }
+  .container { max-width: 820px; margin: 0 auto; }
+  h1 {
+    font-size: 2.2rem;
+    text-align: center;
+    margin-bottom: 0.3rem;
+    color: var(--accent);
+  }
+  .subtitle {
+    text-align: center;
+    color: var(--muted);
+    font-style: italic;
+    margin-bottom: 2.5rem;
+    font-size: 1.1rem;
+  }
+  .snippet {
+    background: var(--card);
+    border-left: 4px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+    padding: 1.2rem 1.5rem;
+  }
+  .snippet h3 {
+    color: var(--accent);
+    font-size: 1.05rem;
+    margin-bottom: 0.6rem;
+  }
+  .snippet h3 span.num {
+    display: inline-block;
+    background: var(--accent);
+    color: #fff;
+    width: 28px;
+    height: 28px;
+    text-align: center;
+    line-height: 28px;
+    border-radius: 50%;
+    font-size: 0.85rem;
+    margin-right: 0.5rem;
+  }
+  .snippet pre {
+    margin: 0.5rem 0;
+    border-radius: 6px;
+    overflow-x: auto;
+  }
+  .snippet code.hljs {
+    background: #1d2021;
+    padding: 0.8rem 1rem;
+    font-size: 0.9rem;
+    border-radius: 6px;
+  }
+  .lesson {
+    background: var(--lesson-bg);
+    border-radius: 5px;
+    padding: 0.5rem 0.8rem;
+    margin-top: 0.5rem;
+    font-size: 0.9rem;
+    color: #ccd;
+  }
+  .lesson strong { color: #d8a657; }
+  .toc {
+    background: var(--card);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+    columns: 2;
+    column-gap: 2rem;
+    font-size: 0.85rem;
+  }
+  .toc a {
+    color: var(--muted);
+    text-decoration: none;
+    display: block;
+    padding: 2px 0;
+  }
+  .toc a:hover { color: var(--accent); }
+  .tldr {
+    background: var(--lesson-bg);
+    border: 2px solid var(--accent);
+    border-radius: 8px;
+    padding: 1.2rem 1.5rem;
+    margin-top: 2rem;
+    font-size: 0.95rem;
+  }
+  .tldr h2 { color: var(--accent); margin-bottom: 0.5rem; }
+  @media (max-width: 600px) {
+    .toc { columns: 1; }
+    h1 { font-size: 1.6rem; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>50 Tiny Lua Snippets</h1>
+<p class="subtitle">to Boost Your Productivity (and What They Taught Me the Hard Way)</p>
+
+<blockquote style="border-left:4px solid #a9b665; padding:0.8rem 1.2rem; margin:0 0 2rem 0; background:var(--card); border-radius:0 8px 8px 0; font-style:italic; color:var(--muted);">
+&ldquo;The first rule of functions is that they should be small.<br>
+The second rule of functions is that they should be smaller than that.&rdquo;<br>
+<span style="color:#a9b665; font-style:normal;">&mdash; Robert C. Martin, <em>Clean Code</em></span>
+</blockquote>
+
+<div class="toc">
+  <a href="#s1">1. Swap values</a>
+  <a href="#s2">2. Ternary via and/or</a>
+  <a href="#s3">3. Default args</a>
+  <a href="#s4">4. Push &rarr; return item</a>
+  <a href="#s5">5. Map</a>
+  <a href="#s6">6. Chainable sort</a>
+  <a href="#s7">7. Sum with fn</a>
+  <a href="#s8">8. Slice</a>
+  <a href="#s9">9. Fisher-Yates shuffle</a>
+  <a href="#s10">10. Random sample</a>
+  <a href="#s11">11. OO in 2 lines</a>
+  <a href="#s12">12. Polymorphic dispatch</a>
+  <a href="#s13">13. CSV iterator</a>
+  <a href="#s14">14. Coerce string &rarr; type</a>
+  <a href="#s15">15. CLI from help string</a>
+  <a href="#s16">16. Trim whitespace</a>
+  <a href="#s17">17. Pretty-print anything</a>
+  <a href="#s18">18. Dot product</a>
+  <a href="#s19">19. Running mean (Welford)</a>
+  <a href="#s20">20. Running variance</a>
+  <a href="#s21">21. Entropy</a>
+  <a href="#s22">22. Mode</a>
+  <a href="#s23">23. Sigmoid</a>
+  <a href="#s24">24. Binary search</a>
+  <a href="#s25">25. Weibull random</a>
+  <a href="#s26">26. FizzBuzz</a>
+  <a href="#s27">27. Flatten</a>
+  <a href="#s28">28. Key-value transform</a>
+  <a href="#s29">29. Filter / select</a>
+  <a href="#s30">30. Max</a>
+  <a href="#s31">31. Reverse table</a>
+  <a href="#s32">32. Unique (order kept)</a>
+  <a href="#s33">33. Prefix sum</a>
+  <a href="#s34">34. Quicksort (functional)</a>
+  <a href="#s35">35. Memoize</a>
+  <a href="#s36">36. Coroutine iterator</a>
+  <a href="#s37">37. Pipe / compose</a>
+  <a href="#s38">38. Crop / clamp</a>
+  <a href="#s39">39. Naive Bayes likelihood</a>
+  <a href="#s40">40. Log-sum for Bayes</a>
+  <a href="#s41">41. Even check (bitwise)</a>
+  <a href="#s42">42. String interpolation</a>
+  <a href="#s43">43. Deep copy</a>
+  <a href="#s44">44. Group by</a>
+  <a href="#s45">45. Zip</a>
+  <a href="#s46">46. Dict from key/val lists</a>
+  <a href="#s47">47. Count occurrences</a>
+  <a href="#s48">48. Curry</a>
+  <a href="#s49">49. CLI dispatcher</a>
+  <a href="#s50">50. Test harness</a>
+</div>
+
+<!-- 1 -->
+<div class="snippet" id="s1">
+<h3><span class="num">1</span> Swap values</h3>
+<pre><code class="language-lua">a, b = b, a</code></pre>
+<div class="lesson"><strong>Lesson:</strong> Lua parallel assignment &rarr; no temp var ever needed.</div>
+</div>
+
+<!-- 2 -->
+<div class="snippet" id="s2">
+<h3><span class="num">2</span> Ternary via and/or</h3>
+<pre><code class="language-lua">local x = (n > 0) and "pos" or "neg"</code></pre>
+<div class="lesson"><strong>Lesson:</strong> Breaks if true-branch = <code>false</code>/<code>nil</code>. Know the trap before using.</div>
+</div>
+
+<!-- 3 -->
+<div class="snippet" id="s3">
+<h3><span class="num">3</span> Default args</h3>
+<pre><code class="language-lua">function f(x) x = x or 42; return x end</code></pre>
+<div class="lesson"><strong>Lesson:</strong> <code>or</code> = default. Fails when <code>false</code> is a valid input.</div>
+</div>
+
+<!-- 4 -->
+<div class="snippet" id="s4">
+<h3><span class="num">4</span> Push &rarr; return item</h3>
+<pre><code class="language-lua">function push(t, x) t[1+#t] = x; return x end</code></pre>
+<div class="lesson"><strong>Lesson:</strong> Returning pushed item &rarr; chainable ops. <code>1+#t</code> faster than <code>table.insert</code>.</div>
+</div>
+
+<!-- 5 -->
+<div class="snippet" id="s5">
+<h3><span class="num">5</span> Map (non-destructive)</h3>
+<pre><code class="language-lua">function map(t, f,    u)
+  u = {}; for _, x in ipairs(t) do u[1+#u] = f(x) end; return u end
+-- map → if f returns nil, item skipped (u[1+#u]=nil is no-op)
+-- select:  map(t, function(x) if x > 0 then return x end end)
+-- reject:  map(t, function(x) if x <= 0 then return x end end)</code></pre>
+<div class="lesson"><strong>Lesson:</strong> <code>map</code> = map + select + reject. Return nil → skip. One fn, three uses. No separate filter needed.</div>
+</div>
+
+<!-- 6 -->
+<div class="snippet" id="s6">
+<h3><span class="num">6</span> Chainable sort</h3>
+<pre><code class="language-lua">function sort(t, fn) table.sort(t, fn); return t end</code></pre>
+<div class="lesson"><strong>Lesson:</strong> <code>table.sort</code> returns nil. Wrapping &rarr; chainable: <code>sort(map(t,f))</code>.</div>
+</div>
+
+<!-- 7 -->
+<div class="snippet" id="s7">
+<h3><span class="num">7</span> Sum with function</h3>
+<pre><code class="language-lua">function sum(t, f,    n)
+  n = 0; for _, v in pairs(t) do n = n + (f and f(v) or v) end; return n end
+-- uses pairs not ipairs, so works on dicts too
+-- sum({1,2,3})          --> 6
+-- sum({1,2,3}, sq)      --> 14
+-- sum(map(t, f))        --> map then sum</code></pre>
+<div class="lesson"><strong>Lesson:</strong> <code>sum</code> = <code>reduce(+)</code>. With fn arg → no intermediate table. Without fn → sum of <code>map</code> result. Compose: <code>sum(map(t,f))</code>.</div>
+</div>
+
+<!-- 8 -->
+<div class="snippet" id="s8">
+<h3><span class="num">8</span> Slice</h3>
+<pre><code class="language-lua">function slice(t, lo, hi,    u)
+  lo = lo and (lo < 0 and #t+1+lo or lo) or 1
+  hi = hi and (hi < 0 and #t+1+hi or hi) or #t
+  u = {}; for i = lo, hi do u[1+#u] = t[i] end; return u end
+-- slice({10,20,30,40,50}, -3)    --> {30,40,50}
+-- slice({10,20,30,40,50}, 2, -2) --> {20,30,40}</code></pre>
+<div class="lesson"><strong>Lesson:</strong> Negative index = count from end. <code>-1</code> = last, <code>-2</code> = second-to-last. Same convention as Python. Lua has no built-in slice &mdash; write it once, use forever.</div>
+</div>
+
+<!-- 9 -->
+<div class="snippet" id="s9">
+<h3><span class="num">9</span> Fisher-Yates shuffle</h3>
+<pre><code class="language-lua">function shuffle(t,    j)
+  for i = #t, 2, -1 do j = math.random(i); t[i], t[j] = t[j], t[i] end
+  return t end</code></pre>
+<div class="lesson"><strong>Lesson:</strong> Only correct O(n) shuffle. Don&rsquo;t <code>sort</code> with <code>random</code> &mdash; biased distribution.</div>
+</div>
+
+<!-- 10 -->
+<div class="snippet" id="s10">
+<h3><span class="num">10</span> Random sample</h3>
+<pre><code class="language-lua">function many(t, n) return slice(shuffle(t), 1, n) end</code></pre>
+<div class="lesson"><strong>Lesson:</strong> Compose primitives. shuffle+slice = reservoir sampling without complexity.</div>
+</div>
+
+<!-- 11 -->
+<div class="snippet" id="s11">
+<h3><span class="num">11</span> OO in 2 lines</h3>
+<pre><code class="language-lua">function new(kl, obj)
+  kl.__index = kl; return setmetatable(obj, kl) end</code></pre>
+<div class="lesson"><strong>Lesson:</strong> Entire class system = metatable + <code>__index</code>. No framework needed.</div>
+</div>
+
+<!-- 12 -->
+<div class="snippet" id="s12">
+<h3><span class="num">12</span> Polymorphic dispatch</h3>
+<pre><code class="language-lua">local NUM, SYM = {}, {}
+function NUM.mid(i) return i.mu end
+function SYM.mid(i) return i.mode end
+-- col:mid() dispatches based on metatable</code></pre>
+<div class="lesson"><strong>Lesson:</strong> Metatable <code>__index</code> &rarr; automatic dispatch. No <code>if type==</code> chains.</div>
+</div>
+
+<!-- 13 -->
+<div class="snippet" id="s13">
+<h3><span class="num">13</span> CSV iterator</h3>
+<pre><code class="language-lua">function csv(file,    src)
+  src = io.open(file)
+  return function(    s, t)
+    s = src:read()
+    if s then
+      t = {}; for x in s:gmatch"[^,]+" do t[1+#t] = x end; return t
+    else src:close() end end end</code></pre>
+<div class="lesson"><strong>Lesson:</strong> Iterators = lazy. 1M row file &rarr; constant memory.</div>
+</div>
+
+<!-- 14 -->
+<div class="snippet" id="s14">
+<h3><span class="num">14</span> Coerce string &rarr; typed value</h3>
+<pre><code class="language-lua">function thing(s)
+  return s == "true" or (s ~= "false" and (tonumber(s) or s)) end</code></pre>
+<div class="lesson"><strong>Lesson:</strong> One line replaces JSON parser for simple configs. <code>"true"&rarr;true</code>, <code>"42"&rarr;42</code>, <code>"cat"&rarr;"cat"</code>.</div>
+</div>
+
+<!-- 15 -->
+<div class="snippet" id="s15">
+<h3><span class="num">15</span> CLI from help string</h3>
+<pre><code class="language-lua">for k, v in help:gmatch("(%S+)=(%S+)") do the[k] = thing(v) end</code></pre>
+<div class="lesson"><strong>Lesson:</strong> Help string IS config spec. Single source of truth. DRY to the bone.</div>
+</div>
+
+<!-- 16 -->
+<div class="snippet" id="s16">
+<h3><span class="num">16</span> Trim whitespace</h3>
+<pre><code class="language-lua">function trim(s) return s:match"^%s*(.-)%s*$" end</code></pre>
+<div class="lesson"><strong>Lesson:</strong> <code>.-</code> = non-greedy. <code>%s*(.-)%s*$</code> trims both sides.</div>
+</div>
+
+<!-- 17 -->
+<div class="snippet" id="s17">
+<h3><span class="num">17</span> Pretty-print anything</h3>
+<pre><code class="language-lua">function o(x,    u)
+  if type(x) ~= "table" then
+    return math.type(x) == "float" and string.format("%.2f", x)
+           or tostring(x) end
+  u = {}
+  for k, v in pairs(x) do
+    u[1+#u] = type(k) == "number" and o(v) or k .. "=" .. o(v) end
+  return "{" .. table.concat(#x==0 and sort(u) or u, ", ") .. "}" end</code></pre>
+<div class="lesson"><strong>Lesson:</strong> Recursive <code>o()</code> &rarr; debug anything. <code>print(o(x))</code> replaces entire inspect library.</div>
+</div>
+
+<!-- 18 -->
+<div class="snippet" id="s18">
+<h3><span class="num">18</span> Dot product</h3>
+<pre><code class="language-lua">function dot(a, b,    n)
+  n = 0; for i = 1, #a do n = n + a[i] * b[i] end; return n end</code></pre>
+<div class="lesson"><strong>Lesson:</strong> No zip needed. Index loop = fastest path in Lua.</div>
+</div>
+
+<!-- 19 -->
+<div class="snippet" id="s19">
+<h3><span class="num">19</span> Running mean (Welford)</h3>
+<pre><code class="language-lua">i.n = i.n + 1
+local d = v - i.mu
+i.mu = i.mu + d / i.n</code></pre>
+<div class="lesson"><strong>Lesson:</strong> One-pass mean. No need to store all values. Numerically stable.</div>
+</div>
+
+<!-- 20 -->
+<div class="snippet" id="s20">
+<h3><span class="num">20</span> Running variance (Welford)</h3>
+<pre><code class="language-lua">i.n  = i.n + 1
+local d = v - i.mu
+i.mu = i.mu + d / i.n
+i.m2 = i.m2 + d * (v - i.mu)
+sd = i.n < 2 and 0 or math.sqrt(math.max(0,i.m2) / (i.n - 1))</code></pre>
+<div class="lesson"><strong>Lesson:</strong> Online variance in 4 lines. <code>m2</code> tracks sum of squared diffs from running mean. Guard <code>n&lt;2</code> and <code>max(0,m2)</code> to avoid NaN from floating point drift.</div>
+</div>
+
+<!-- 21 -->
+<div class="snippet" id="s21">
+<h3><span class="num">21</span> Entropy</h3>
+<pre><code class="language-lua">function entropy(has, n,    f)
+  f = function(v) return v > 0 and -(v/n)*math.log(v/n,2) or 0 end
+  return sum(has, f) end
+-- entropy({a=3, b=1, c=1}, 5) --> 1.37</code></pre>
+<div class="lesson"><strong>Lesson:</strong> Entropy defined via <code>sum</code>. Compose primitives → no manual loops. Low entropy = pure, high = mixed.</div>
+</div>
+
+<!-- 22 -->
+<div class="snippet" id="s22">
+<h3><span class="num">22</span> Mode (most common)</h3>
+<pre><code class="language-lua">function mode(has) return max(has) end
+-- mode({a=3, b=1, c=1}) --> "a"</code></pre>
+<div class="lesson"><strong>Lesson:</strong> Mode = key with max count. One call to <code>max</code>. Compose primitives → no custom loops.</div>
+</div>
+
+<!-- 23 -->
+<div class="snippet" id="s23">
+<h3><span class="num">23</span> Sigmoid normalization</h3>
+<pre><code class="language-lua">function sigmoid(z) return 1 / (1 + math.exp(-1.7 * z)) end</code></pre>
+<div class="lesson"><strong>Lesson:</strong> Maps (&minus;&infin;, &infin;) &rarr; (0, 1). The 1.7 scaling &asymp; matches CDF of normal distribution.</div>
+</div>
+
+<!-- 24 -->
+<div class="snippet" id="s24">
+<h3><span class="num">24</span> Binary search (bisect)</h3>
+<pre><code class="language-lua">function bisect(t, x,    lo, hi, m)
+  lo, hi = 1, #t
+  while lo <= hi do
+    m = (lo + hi) // 2
+    if t[m] <= x then lo = m + 1 else hi = m - 1 end end
+  return lo - 1 end</code></pre>
+<div class="lesson"><strong>Lesson:</strong> Returns insertion point. Foundation for rank stats, KS test, percentiles.</div>
+</div>
+
+<!-- 25 -->
+<div class="snippet" id="s25">
+<h3><span class="num">25</span> Weibull random variate</h3>
+<pre><code class="language-lua">function weibull(k, lambda)
+  return lambda * (-math.log(1 - math.random()))^(1/k) end</code></pre>
+<div class="lesson"><strong>Lesson:</strong> Inverse transform sampling. Works for any distribution with closed-form inverse CDF.</div>
+</div>
+
+<!-- 26 -->
+<div class="snippet" id="s26">
+<h3><span class="num">26</span> FizzBuzz</h3>
+<pre><code class="language-lua">for i = 1, 100 do
+  print((i%15==0 and "FizzBuzz") or (i%3==0 and "Fizz")
+        or (i%5==0 and "Buzz") or i) end</code></pre>
+<div class="lesson"><strong>Lesson:</strong> Chain <code>and/or</code> = multi-branch ternary. Check most specific first.</div>
+</div>
+
+<!-- 27 -->
+<div class="snippet" id="s27">
+<h3><span class="num">27</span> Flatten nested table</h3>
+<pre><code class="language-lua">function flat(t, u)
+  u = u or {}
+  for _, v in ipairs(t) do
+    if type(v) == "table" then flat(v, u) else u[1+#u] = v end end
+  return u end</code></pre>
+<div class="lesson"><strong>Lesson:</strong> Recursive + accumulator arg &rarr; no intermediate tables.</div>
+</div>
+
+<!-- 28 -->
+<div class="snippet" id="s28">
+<h3><span class="num">28</span> Key-value transform</h3>
+<pre><code class="language-lua">function kv(t, fk, fv,    u)
+  u = {}; for _, x in ipairs(t) do u[fk(x)] = fv(x) end; return u end</code></pre>
+<div class="lesson"><strong>Lesson:</strong> Build dicts from lists in one pass. Replaces 5-line loop patterns.</div>
+</div>
+
+<!-- 29 -->
+<div class="snippet" id="s29">
+<h3><span class="num">29</span> Select / reject (via map)</h3>
+<pre><code class="language-lua">function sel(t, f) return map(t, function(x) if     f(x) then return x end end) end
+function rej(t, f) return map(t, function(x) if not f(x) then return x end end) end
+-- sel({1,-2,3,-4}, function(x) return x>0 end) --> {1,3}
+-- rej({1,-2,3,-4}, function(x) return x>0 end) --> {-2,-4}</code></pre>
+<div class="lesson"><strong>Lesson:</strong> <code>sel</code> and <code>rej</code> = thin wrappers on <code>map</code>. No new loops. Compose, don't repeat.</div>
+</div>
+
+<!-- 30 -->
+<div class="snippet" id="s30">
+<h3><span class="num">30</span> Max (key of highest value)</h3>
+<pre><code class="language-lua">function max(t, f,    best, bv)
+  for k, v in pairs(t) do
+    local s = f and f(k, v) or v
+    if not bv or s > bv then best, bv = k, s end end
+  return best, bv end
+-- max({a=3, b=1})                  --> "a", 3
+-- max(t, function(k,v) return v end) --> argmax with custom fn</code></pre>
+<div class="lesson"><strong>Lesson:</strong> Without fn → key of max value (used by <code>mode</code>). With fn → generic argmax. One fn, two uses.</div>
+</div>
+
+<!-- 31 -->
+<div class="snippet" id="s31">
+<h3><span class="num">31</span> Reverse table</h3>
+<pre><code class="language-lua">function rev(t,    u)
+  u = {}; for i = #t, 1, -1 do u[1+#u] = t[i] end; return u end</code></pre>
+<div class="lesson"><strong>Lesson:</strong> New table, not in-place. Immutable style = safe to pass around.</div>
+</div>
+
+<!-- 32 -->
+<div class="snippet" id="s32">
+<h3><span class="num">32</span> Unique values (order preserved)</h3>
+<pre><code class="language-lua">function unique(t,    seen, u)
+  seen, u = {}, {}
+  for _, v in ipairs(t) do
+    if not seen[v] then seen[v] = true; u[1+#u] = v end end
+  return u end</code></pre>
+<div class="lesson"><strong>Lesson:</strong> Hash table for O(1) lookup. Preserves insertion order unlike set-by-keys.</div>
+</div>
+
+<!-- 33 -->
+<div class="snippet" id="s33">
+<h3><span class="num">33</span> Prefix sum / accumulate</h3>
+<pre><code class="language-lua">function accum(t,    u, s)
+  u, s = {}, 0
+  for _, v in ipairs(t) do s = s + v; u[1+#u] = s end
+  return u end</code></pre>
+<div class="lesson"><strong>Lesson:</strong> Running totals. Foundation for CDF, percentile calculations.</div>
+</div>
+
+<!-- 34 -->
+<div class="snippet" id="s34">
+<h3><span class="num">34</span> Quicksort (functional)</h3>
+<pre><code class="language-lua">function qsort(t)
+  if #t <= 1 then return t end
+  local p, lo, hi = t[1], {}, {}
+  for i = 2, #t do push(t[i] < p and lo or hi, t[i]) end
+  return flat{qsort(lo), {p}, qsort(hi)} end</code></pre>
+<div class="lesson"><strong>Lesson:</strong> Elegant but slow &mdash; O(n) extra alloc per level. Use <code>table.sort</code> in prod.</div>
+</div>
+
+<!-- 35 -->
+<div class="snippet" id="s35">
+<h3><span class="num">35</span> Memoize</h3>
+<pre><code class="language-lua">function memo(f,    cache)
+  cache = {}
+  return function(x) cache[x] = cache[x] or f(x); return cache[x] end end</code></pre>
+<div class="lesson"><strong>Lesson:</strong> Trade memory for speed. Only works for pure fns with hashable args.</div>
+</div>
+
+<!-- 36 -->
+<div class="snippet" id="s36">
+<h3><span class="num">36</span> Coroutine iterator</h3>
+<pre><code class="language-lua">function range(lo, hi)
+  return coroutine.wrap(function()
+    for i = lo, hi do coroutine.yield(i) end
+  end) end</code></pre>
+<div class="lesson"><strong>Lesson:</strong> Coroutines = custom iterators. Lazy, composable, zero-copy.</div>
+</div>
+
+<!-- 37 -->
+<div class="snippet" id="s37">
+<h3><span class="num">37</span> Pipe / compose</h3>
+<pre><code class="language-lua">function pipe(x, ...)
+  for _, f in ipairs{...} do x = f(x) end; return x end
+-- pipe(data, clean, normalize, classify)</code></pre>
+<div class="lesson"><strong>Lesson:</strong> Left-to-right composition. Reads like English. No nesting.</div>
+</div>
+
+<!-- 38 -->
+<div class="snippet" id="s38">
+<h3><span class="num">38</span> Crop / clamp</h3>
+<pre><code class="language-lua">function crop(x, lo, hi) return math.max(lo, math.min(hi, x)) end</code></pre>
+<div class="lesson"><strong>Lesson:</strong> Clamp in one line. Use everywhere: pixel coords, probability, config bounds.</div>
+</div>
+
+<!-- 39 -->
+<div class="snippet" id="s39">
+<h3><span class="num">39</span> Naive Bayes likelihood</h3>
+<pre><code class="language-lua">function like(has, v, n, prior, k)
+  return math.max(1/1E32, ((has[v] or 0) + k*prior) / (n + k + 1/1E32)) end</code></pre>
+<div class="lesson"><strong>Lesson:</strong> Laplace smoothing (<code>k*prior</code>) prevents zero-probability trap. Never multiply by 0.</div>
+</div>
+
+<!-- 40 -->
+<div class="snippet" id="s40">
+<h3><span class="num">40</span> Log-sum for Bayes</h3>
+<pre><code class="language-lua">score = math.log(prior) + sum(cols, function(c)
+  return c.v ~= "?" and math.log(c:like(v)) or 0 end)</code></pre>
+<div class="lesson"><strong>Lesson:</strong> Log-space &rarr; additions not multiplications. No float underflow on many features.</div>
+</div>
+
+<!-- 41 -->
+<div class="snippet" id="s41">
+<h3><span class="num">41</span> Even check (bitwise)</h3>
+<pre><code class="language-lua">local is_even = (n & 1) == 0</code></pre>
+<div class="lesson"><strong>Lesson:</strong> Bitwise AND &rarr; fastest parity check. No modulo needed.</div>
+</div>
+
+<!-- 42 -->
+<div class="snippet" id="s42">
+<h3><span class="num">42</span> String interpolation</h3>
+<pre><code class="language-lua">function fmt(s, t) return s:gsub("{(%w+)}", t) end
+-- fmt("Hello {name}!", {name = "world"})</code></pre>
+<div class="lesson"><strong>Lesson:</strong> <code>gsub</code> + table = template engine in 1 line.</div>
+</div>
+
+<!-- 43 -->
+<div class="snippet" id="s43">
+<h3><span class="num">43</span> Deep copy</h3>
+<pre><code class="language-lua">function copy(t)
+  if type(t) ~= "table" then return t end
+  local u = {}
+  for k, v in pairs(t) do u[k] = copy(v) end
+  return setmetatable(u, getmetatable(t)) end</code></pre>
+<div class="lesson"><strong>Lesson:</strong> Preserves metatables. Recursive. Needed when modifying cloned configs.</div>
+</div>
+
+<!-- 44 -->
+<div class="snippet" id="s44">
+<h3><span class="num">44</span> Group by key function</h3>
+<pre><code class="language-lua">function group(t, f,    u)
+  u = {}
+  for _, x in ipairs(t) do
+    local k = f(x); u[k] = u[k] or {}; u[k][1+#u[k]] = x end
+  return u end</code></pre>
+<div class="lesson"><strong>Lesson:</strong> SQL GROUP BY in pure Lua. Foundation for stratified sampling, pivots.</div>
+</div>
+
+<!-- 45 -->
+<div class="snippet" id="s45">
+<h3><span class="num">45</span> Zip two lists</h3>
+<pre><code class="language-lua">function zip(a, b,    u)
+  u = {}; for i = 1, math.min(#a, #b) do u[i] = {a[i], b[i]} end
+  return u end</code></pre>
+<div class="lesson"><strong>Lesson:</strong> No built-in zip. 1 line. Use <code>math.min</code> to handle unequal lengths.</div>
+</div>
+
+<!-- 46 -->
+<div class="snippet" id="s46">
+<h3><span class="num">46</span> Dict from key/val lists</h3>
+<pre><code class="language-lua">function dict(ks, vs,    u)
+  u = {}; for i = 1, #ks do u[ks[i]] = vs[i] end; return u end</code></pre>
+<div class="lesson"><strong>Lesson:</strong> Python&rsquo;s <code>dict(zip(k,v))</code> in Lua. Pairs two parallel arrays.</div>
+</div>
+
+<!-- 47 -->
+<div class="snippet" id="s47">
+<h3><span class="num">47</span> Count occurrences</h3>
+<pre><code class="language-lua">function counts(t,    u)
+  u = {}; for _, v in ipairs(t) do u[v] = (u[v] or 0) + 1 end; return u end</code></pre>
+<div class="lesson"><strong>Lesson:</strong> Histogram in one pass. Foundation for entropy, mode, chi-square.</div>
+</div>
+
+<!-- 48 -->
+<div class="snippet" id="s48">
+<h3><span class="num">48</span> Curry (partial application)</h3>
+<pre><code class="language-lua">function curry(f, x) return function(...) return f(x, ...) end end</code></pre>
+<div class="lesson"><strong>Lesson:</strong> Lock first arg &rarr; specialized fn. <code>curry(add, 1)</code> = increment.</div>
+</div>
+
+<!-- 49 -->
+<div class="snippet" id="s49">
+<h3><span class="num">49</span> CLI dispatcher</h3>
+<pre><code class="language-lua">-- Config from help string (help = "... seed=1 ... k=2 ...")
+for k, v in help:gmatch("(%S+)=(%S+)") do the[k] = thing(v) end
+
+-- CLI: flags update config or call demo functions
+local function main(    n, k, v)
+  n = 1
+  while n <= #arg do
+    n, k, v = n+1, arg[n], arg[n+1]
+    if eg[k] then math.randomseed(the.seed); eg[k](v and thing(v) or nil)
+              if v and not eg[v] then n = n+1 end
+    else for k1 in pairs(the) do
+           if k == "-"..k1:sub(1,1) then the[k1] = thing(v); n = n+1 end end end end end
+
+-- lua ezr.lua -s 42 --test data.csv</code></pre>
+<div class="lesson"><strong>Lesson:</strong> Help string = config spec = docs. CLI parses flags into <code>the</code> or dispatches to <code>eg</code> table. Zero dependencies. Whole CLI in 10 lines.</div>
+</div>
+
+<!-- 50 -->
+<div class="snippet" id="s50">
+<h3><span class="num">50</span> Test harness in 10 lines</h3>
+<pre><code class="language-lua">local eg = {}
+
+eg["--all"] = function(_,    ss)
+  ss = {}
+  for k in pairs(eg) do if k ~= "--all" then ss[1+#ss] = k end end
+  table.sort(ss)
+  for _, k in ipairs(ss) do
+    print("\n" .. k); math.randomseed(1); eg[k]() end end</code></pre>
+<div class="lesson"><strong>Lesson:</strong> Tests = table of fns. <code>--all</code> = iterate sorted keys. Seed reset &rarr; reproducible. No test framework needed.</div>
+</div>
+
+<div class="tldr">
+<h2>TL;DR</h2>
+<p>Lua rewards small composable functions. Build <code>push</code>, <code>map</code>, <code>sort</code>, <code>sum</code>, <code>sel</code> once &rarr; everything else is 1&ndash;3 lines. Help string as config. Metatables as classes. Iterators as lazy streams. Keep stdlib tiny, compose big.</p>
+</div>
+
+</div>
+
+<script>hljs.highlightAll();</script>
+</body>
+</html>
+</code></pre>

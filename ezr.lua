@@ -131,19 +131,20 @@ function NUM.spread(i)
   return i.n > 1 and (max(0,i.m2)/(i.n - 1))^0.5 or 0 end
 
 -- Entropy for symbols: sum -p*log(p)
-function SYM.spread(i,    fn) 
-  return - sum(i.has, function(v) return v/i.n * log(v/i.n, 2) end) end
+function SYM.spread(i,    n)
+  n=0; for _,v in pairs(i.has) do n = n + v/i.n * log(v/i.n, 2) end
+  return -n end
 
 -- Sigmoid normalization.
-function NUM.norm(i,v,    sd)
+function NUM.norm(i,v,    z)
   if v=="?" then return v end
-  z = (v - i.mu) / (spread() + 1e-32)
+  z = (v - i.mu) / (i:spread() + 1e-32)
   return 1/(1 + exp(-1.7*l.crop(z,-3,3))) end
 
 -- Minkowski distance to ideal goal.
 function DATA.disty(i,row,    fn)
   fn = function(col) return abs(col:norm(row[col.at]) - col.heaven)^the.p end
-  return (sum(i.cols.y,fn) / #i.cols.y) ^ (1/the.p) end
+  return (l.sum(i.cols.y,fn) / #i.cols.y) ^ (1/the.p) end
 
 -- Probability of winning against the median row.
 function wins(data,    ys,lo,n_mid)
@@ -261,7 +262,7 @@ local function bestRanks(dict)
 function l.new(kl,obj) kl.__index=kl; return setmetatable(obj,kl) end
 
 -- Crop number into range lo...hi
-function l.crop(n,lo,hi) return max(lo, min(hi,n)) emd
+function l.crop(n,lo,hi) return max(lo, min(hi,n)) end
 
 -- Appends an item to the end of a table and returns the added item.
 function l.push(t,x) t[1+#t]=x; return x end
@@ -277,8 +278,12 @@ function l.lt(x) return function(a,b) return a[x] < b[x] end end
 function l.sort(t,f) table.sort(t,f); return t end
 
 -- Transforms a table by applying a function to each element.
-function l.map(t,f,  u) 
+function l.map(t,f,  u)
   u={}; for i,x in ipairs(t) do u[i]=f(x) end; return u end
+
+-- Sums f(x) over t.
+function l.sum(t,f,  n)
+  n=0; for _,x in ipairs(t) do n = n + f(x) end; return n end
 
 -- Creates a new table by applying key and value transformation functions.
 function l.kv(t,fk,fv,  u) 

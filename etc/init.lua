@@ -51,3 +51,9 @@ require("lazy").setup({
   { "rebelot/kanagawa.nvim", lazy = false, priority = 1000,
     config = function() vim.cmd("colorscheme kanagawa") end },
 })
+
+-- Load the "let" language filetype + syntax plugin.
+local letdir = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":h")
+package.path = letdir .. "/?.lua;" .. package.path
+local ok, nvimlet = pcall(require, "nvimlet")
+if ok then nvimlet.setup() end
