@@ -114,7 +114,7 @@ lets = function(file)
   end
 
   local h = io.open(file); local src = h:read"*a"; h:close()
-  if src:sub(1,1) == "#" then src = src:gsub("^[^\n]*\n","",1) end -- strip shebang
+  if src:sub(1,2) == "#!" then src = src:gsub("^[^\n]*\n","",1) end -- strip shebang
   local out = {}
   for para in (src.."\n\n"):gmatch"(.-)\n\n" do
     local f = para:match"^[^\n]*" or ""
@@ -125,6 +125,7 @@ lets = function(file)
       local depth = 0
       for ln in para:gmatch"[^\n]+" do
         local pad, body = ln:match"^( *)(.*)"
+        body = body:gsub("^\f+", "")                           -- drop leading formfeeds
         if body:sub(1,1) == "#" then
           out[#out+1] = pad.."-- "..body                       -- line-level comment
         elseif body ~= "" then

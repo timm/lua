@@ -58,8 +58,8 @@ Cols = (ss_names):
   for n,s in ipairs(ss_names):
     let col = l.push(all, 
                      (s:match"^[A-Z]" and Num or Sym)(s,n))
-    if not s:match"X$": 
-       l.push(s:match"[%+%-!]$" and ys or xs, col) end
+    if not s:match"X$":
+       l.push(s:match"[%+%-!]$" and ys or xs, col) end end
   ^l.new(COLS, {x=xs, y=ys, all=all, names=ss_names})
 
 # Data container: rows + summarized columns.
@@ -71,7 +71,7 @@ Data = (src):
     for _,row in ipairs(src or {}): add(data, row) end
   ^data
 
- Clone: new Data with same column structure.
+# Clone: new Data with same column structure.
 DATA.clone = (i,rows):
   ^adds(rows or {}, Data({i.cols.names}))
 
@@ -162,8 +162,7 @@ DATA.disty = (i,row):
 wins = (data):
   let ys = l.sort(l.map(data.rows, (row): data:disty(row) end))
   let lo, n_mid = ys[1], ys[#ys // 2 + 1]
-  ^(row): 
-     floor(100 * (1 - ((data:disty(row) - lo) / (n_mid - lo + 1e-32)))) end
+  ^(row): floor(100 * (1 - ((data:disty(row) - lo) / (n_mid - lo + 1e-32)))) end
 
 ## Tree
 # Build variance-minimizing tree.
