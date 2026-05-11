@@ -1,0 +1,39 @@
+-- Mini demo. Uniform !-marker `!`. Bracketed conditions everywhere.
+-- λ=function  ^=return  **=exponent  ++=concat  !=!
+-- Run: ./let-mini old/mini-demo.let
+
+let square = λ(n) ^n ** 2 !
+let greet  = λ(name) ^"hello, "++name++"!" !
+let inc    = λ(x) ^x + 1 !
+
+-- everything-on-one-line if-elseif-else with glued !!
+let classify = λ(n) if (n>0) ^"pos" elseif (n<0) ^"neg" else ^"zero" !!
+
+-- multi-line lambda with `for` (plain Lua `do/!`)
+let sumto = λ(n)
+  let s = 0
+  for i = 1, n do s += i !
+  ^s !
+
+-- list comprehensions (auto pairs/ipairs; bracketed `if` filter)
+let pairs2 = λ(xs) ^[{x, x*2} for x in xs] !
+let bigxs  = λ(xs) ^[v for v in xs if v > 10] !
+
+-- ?= truthy default; +=, -=, *=, /= compound assigns
+let total = 10
+total += 5
+total *= 2
+
+let shout = λ(msg, n)
+  msg ?= "hi"
+  n   ?= 3
+  for i = 1, n do print(msg) !!
+
+print("square 9:", square(9))
+print("greet:",    greet("tim"))
+print("classify:", classify(7), classify(0), classify(-3))
+print("sumto 5:",  sumto(5))
+print("total:",    total)
+print("bigxs:",    table.concat(bigxs({5,12,8,15,3,20}), ","))
+shout()
+shout("yo", 2)
