@@ -314,23 +314,170 @@ lua -e 'local orig=load; _G.load=function(s,n) io.stderr:write(s) return orig(s,
   let foo.let
 ```
 
-# LIMITATIONS
+# THE COLON `:` — ALL MEANINGS
 
-- Function and control-flow **headers must fit on one physical line**.
-- `++` and `--` are **not** increment/decrement; use `+= 1` / `-= 1`.
-- Inline-lambda bodies cannot contain unbalanced `end`s — the regex stops at
-  the first ` end`. For multi-statement closures, use a named helper.
-- `Exports = ...` recognizes only **bare identifiers** — no defaults, no
-  rename, no nested expressions.
-- `[[...]]` long strings work but **do not interpolate**. Long strings also
-  **cannot contain blank lines** (a blank line ends the source paragraph and
-  the transpiler will mis-classify subsequent lines).
-- Paragraph-leading `#` is reserved for comments, so a Lua statement that
-  starts at column 0 with `#expr` (length operator) would be commented out.
-  Workaround: indent the line or assign to a temporary.
-- `:` inside `if`/`for` conditions/iterators is disambiguated by requiring
-  the block-opener `:` to be at end-of-line or followed by whitespace
-  (matches Lua method-call shape `obj:method` of no-space-after-`:`).
+`:` is overloaded. The transpiler disambiguates by **what follows it**.
+
+| Pattern                                | Meaning                          |
+|----------------------------------------|----------------------------------|
+| `obj:method(...)` / `obj:method"..."`  | Lua method call (passthrough)    |
+| `if cond:` *EOL*                       | block-opener `if cond then`      |
+| `if cond: body`                        | one-liner: `if cond then body end` (auto-closes) |
+| `else:` / `elseif cond:`               | continuation of an open `if`     |
+| `for X:` *EOL* / `for X: body`         | block-opener / one-liner `for`   |
+| `name = (args):` *EOL*                 | named-fn block-opener            |
+| `name = (args): body`                  | named-fn one-liner               |
+| `let name = (args):` (...same...)      | same, with `local` declaration   |
+| `(args): body end`                     | inline anonymous lambda (must have `end` on same line) |
+
+**Disambiguation rule.** A method call has the shape `:identifier` (no
+whitespace between `:` and the next token). A let-language `:` is always
+followed by **end-of-line, whitespace, or whitespace-then-content**.
+
+You **cannot mix one-liner and continuation**. `if X: body` already closes
+the `if`; a following `else:` is dangling. If you need a chain, use the
+block-opener form on every branch:
+
+```let
+if X:
+  body1
+else:
+  body2
+end
+```
+
+# LIMITATIONS AND GOTCHAS
+
+## Headers must be one line
+
+Function and control-flow **headers** (everything up to and including the
+opening `:`) must fit on one physical line. The body that follows may span
+many lines.
+
+## Increment / decrement
+
+`++` and `--` are **not** increment/decrement. `--` starts a Lua comment.
+Use `+= 1` / `-= 1`.
+
+## Inline-lambda body cannot span lines
+
+The inline-lambda regex `(args): body end` matches within a single line.
+A closure with a multi-line body must be extracted to a named helper:
+
+```let
+-- ✗ broken — inline lambda body cannot span lines
+let cb = (node, lvl, pre): 
+  let p = lvl > 0 and ("|   "):rep(lvl-1)..pre or ""
+  io.write(...) end
+
+-- ✓ extract to a named helper
+let cb = (node, lvl, pre):
+  let p = lvl > 0 and ("|   "):rep(lvl-1)..pre or ""
+  io.write(...)
+end
+i:nodes(cb)
+```
+
+## Inline-lambda needs space after `:`
+
+`(args): body end` requires **whitespace after `:`** so the transpiler
+distinguishes it from a method call. `(x):body end` is not a lambda —
+it's parsed as a method call on `(x)`.
+
+## One-liner `if` + extra `end`
+
+A one-liner self-closes via the transpiler. Adding an explicit `end`
+collapses the wrong block:
+
+```let
+for k in pairs(eg): if k != "--all": l.push(ss, k) end end
+                                                      ↑↑↑
+                                       one end too many — close for + outer
+```
+
+Either drop the `end` (one-liner `if` already closes itself):
+
+```let
+for k in pairs(eg): if k != "--all": l.push(ss, k) end
+                                                    ↑
+                                       just closes the for
+```
+
+Or use block-opener form. The transpiler counts trailing `end` tokens;
+when in doubt, dump the transpiled Lua and count blocks by hand (see
+**DIAGNOSTICS** below).
+
+## Comprehensions and brackets inside iterators
+
+The comprehension regex `[expr for x in iter]` stops at the **first** `]`.
+If `iter` contains a literal `]` (e.g., inside a string), the regex
+captures too little:
+
+```let
+-- ✗ broken — `]` inside "[^,]+" closes the comprehension early
+let t = [l.thing(x) for x in s:gmatch"[^,]+"]
+```
+
+**Workaround**: bind the iterator to a let first:
+
+```let
+-- ✓ works — `xs` has no special chars
+let xs = s:gmatch"[^,]+"
+let t  = [l.thing(x) for x in xs]
+```
+
+Or use a plain `for` loop and `l.push`.
+
+## `Exports` shadowing
+
+`Exports = the, DATA, NUM` forward-declares `the, DATA, NUM` as locals.
+**Do not** re-declare those names with `let`:
+
+```let
+Exports = the, NUM
+
+-- ✗ creates a fresh local; Exports() snapshot still sees the original nil
+let the = {}
+
+-- ✓ bare assignment populates the slot Exports already declared
+the = {}
+```
+
+Other names (helpers, library, math shortcuts) should still use `let`
+because they're not exported.
+
+## Long strings
+
+`[[...]]` long strings work and pass through unchanged. They **do not
+interpolate**. They **cannot contain blank lines** — a blank line in the
+source ends the current paragraph; subsequent lines are mis-parsed.
+Keep `[[...]]` blocks compact, or use multiple `".."` concatenations.
+
+## `^` is statement-leading only
+
+`^` is rewritten to `return` only at the **start** of a body. Mid-line
+`^` keeps its Lua meaning (exponent). So `f = (x): x ^ 2 end` is `x^2`,
+not `return 2`. And `^ x` / `^x` at the start of a body line is `return`.
+
+## `;` suppresses auto-return in one-liners
+
+The one-liner forms auto-prepend `return` to expression bodies. A `;` in
+the body signals "this is a statement sequence, don't add `return`":
+
+```let
+l.push = (t,x): t[1+#t] = x; return x end
+-- → function(t,x) t[1+#t] = x; return x end   (no auto-return)
+```
+
+Body that starts with `if`/`for`/`while`/`local`/`do`/`repeat`/`return`/
+`break`, or is an assignment, also skips the auto-return.
+
+## Method dispatch on plain tables
+
+Plain Lua tables have no methods. `i.rows:remove(n)` is **not** sugar for
+`table.remove(i.rows, n)` — it looks for a `remove` field on `i.rows`
+and errors. Use `table.remove(i.rows, n)` (or alias once at top:
+`let tremove = table.remove`).
 
 # EXAMPLE
 

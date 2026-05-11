@@ -20,39 +20,39 @@ ezr.let : explainable multi-objective optimization
 ]]
 the = {}
 
-## Registry
-# Forward declarations.
+-- ## Registry
+-- Forward declarations.
 l = {}
 let COLS = {}
 let Tree, Sym, Num, Cols, Data
 let add, sub, adds, mink, wins, split, same, bestRanks
 
-# Math shortcuts.
+-- Math shortcuts.
 let abs,min,max,log,exp   = math.abs, math.min, math.max, math.log, math.exp
 let floor,rand,randomseed = math.floor, math.random, math.randomseed
 let mtype                 = math.type
 
-# Structs
+-- Structs
 NUM  = {}
 SYM  = {}
 DATA = {}
 TREE = {}
 
-## Classes
-# Tree node with scoring fn.
+-- ## Classes
+-- Tree node with scoring fn.
 Tree = (fn_score):
   ^l.new(TREE, {score=fn_score})
 
-# Symbolic (categorical) column.
+-- Symbolic (categorical) column.
 Sym = (s,n):
   ^l.new(SYM, {txt=s or "", at=n or 0, has={}, n=0})
 
-# Numeric column. trailing "-" => minimize (heaven=0).
+-- Numeric column. trailing "-" => minimize (heaven=0).
 Num = (s,n):
   ^l.new(NUM, {txt=s or "", at=n or 0, n=0, mu=0, m2=0,
                 heaven=s and s:match"-$" and 0 or 1})
 
-# Names list -> columns (Num/Sym; x/y/all).
+-- Names list -> columns (Num/Sym; x/y/all).
 Cols = (ss_names):
   let xs,ys,all = {},{},{}
   for n,s in ipairs(ss_names):
@@ -62,7 +62,7 @@ Cols = (ss_names):
        l.push(s:match"[%+%-!]$" and ys or xs, col) end end
   ^l.new(COLS, {x=xs, y=ys, all=all, names=ss_names})
 
-# Data container: rows + summarized columns.
+-- Data container: rows + summarized columns.
 Data = (src):
   let data = l.new(DATA, {rows={}, cols=nil, _mid=nil})
   if type(src) == "string":
@@ -71,26 +71,26 @@ Data = (src):
     for _,row in ipairs(src or {}): add(data, row) end
   ^data
 
-# Clone: new Data with same column structure.
+-- Clone: new Data with same column structure.
 DATA.clone = (i,rows):
   ^adds(rows or {}, Data({i.cols.names}))
 
-## Update
-# Remove a value: just adding with -1.
+-- ## Update
+-- Remove a value: just adding with -1.
 sub = (i,v): i:add(v, -1)
 
-# Bulk-add values to summary (defaults Num()).
+-- Bulk-add values to summary (defaults Num()).
 adds = (vs, summary):
   summary = summary or Num()
   for _,v in ipairs(vs or {}): add(summary, v)
   ^summary
 
-# Add value to counter / row to dataset.
+-- Add value to counter / row to dataset.
 add = (i,v,w):
   if v != "?": i:_add(v, w or 1)
   ^v
 
-# NUM update: incremental mean/variance.
+-- NUM update: incremental mean/variance.
 NUM._add = (i,v,w):
   i.n = i.n + w
   if w < 0 and i.n <= 1:
@@ -100,15 +100,15 @@ NUM._add = (i,v,w):
     i.mu = i.mu + w * err / i.n
     i.m2 = i.m2 + w * err * (v - i.mu) end
 
-# SYM update: counts.
+-- SYM update: counts.
 SYM._add = (i,v,w): i.has[v] = w + (i.has[v] or 0)
 
-# COLS update: each col with row[col.at].
+-- COLS update: each col with row[col.at].
 COLS._add = (i,row,w):
   for _,col in ipairs(i.all): add(col, row[col.at], w)
   ^row
 
-# DATA update: first row sets columns; later rows update stats.
+-- DATA update: first row sets columns; later rows update stats.
 DATA._add = (i,row,w):
   if not i.cols:
     i.cols = Cols(row)
@@ -121,51 +121,51 @@ DATA._add = (i,row,w):
       for n,r in ipairs(i.rows):
         if r == row: table.remove(i.rows, n); break end end end
 
-## Query
-# Mean for nums.
+-- ## Query
+-- Mean for nums.
 NUM.mid = (i): i.mu
 
-# Mode for syms.
+-- Mode for syms.
 SYM.mid = (i):
   let most, mode = -1, nil
   for v,n in pairs(i.has):
     if n > most: most, mode = n, v end
   ^mode
 
-# Midpoints across all columns.
+-- Midpoints across all columns.
 DATA.mid = (i):
   i._mid = i._mid or l.map(i.cols.all, (col): col:mid() end)
   ^i._mid
 
-# Spread: stdev for nums.
+-- Spread: stdev for nums.
 NUM.spread = (i):
   ^i.n > 1 and (max(0, i.m2) / (i.n - 1)) ** 0.5 or 0
 
-# Spread: entropy for syms.
+-- Spread: entropy for syms.
 SYM.spread = (i):
   let n = 0
   for _,v in pairs(i.has): n = n + v / i.n * log(v / i.n, 2)
   ^-n
 
-# Sigmoid normalization.
+-- Sigmoid normalization.
 NUM.norm = (i,v):
   if v == "?": ^v
   let z = (v - i.mu) / (i:spread() + 1e-32)
   ^1 / (1 + exp(-1.7 * l.crop(z, -3, 3)))
 
-# Minkowski distance to ideal goal.
+-- Minkowski distance to ideal goal.
 DATA.disty = (i,row):
   let fn = (col): abs(col:norm(row[col.at]) - col.heaven) ** the.p end
   ^(l.sum(i.cols.y, fn) / #i.cols.y) ** (1 / the.p)
 
-# Probability of winning vs median row.
+-- Probability of winning vs median row.
 wins = (data):
   let ys = l.sort(l.map(data.rows, (row): data:disty(row) end))
   let lo, n_mid = ys[1], ys[#ys // 2 + 1]
   ^(row): floor(100 * (1 - ((data:disty(row) - lo) / (n_mid - lo + 1e-32)))) end
 
-## Tree
-# Build variance-minimizing tree.
+-- ## Tree
+-- Build variance-minimizing tree.
 TREE.build = (i,data,rows):
   let mid = data:clone(rows):mid()
   i.y = adds(l.map(rows, (r): i.score(r) end))
@@ -183,7 +183,7 @@ TREE.build = (i,data,rows):
     i.right = Tree(i.score):build(data, best.right) end
   ^i
 
-## Traverse tree to relevant leaf.
+-- ## Traverse tree to relevant leaf.
 TREE.leaf = (i,row):
   if not i.col: ^i
   let v = row[i.at]
@@ -191,7 +191,7 @@ TREE.leaf = (i,row):
   let ok = i.col.mu and (v <= i.cut) or (v == i.cut)
   ^(ok and i.left or i.right):leaf(row)
 
-## Recursive node visitor.
+-- ## Recursive node visitor.
 TREE.nodes = (i,fn,lvl,pre):
   lvl, pre = lvl or 0, pre or ""
   fn(i, lvl, pre)
@@ -203,7 +203,7 @@ TREE.nodes = (i,fn,lvl,pre):
   for _,p in ipairs(nds):
     p[1]:nodes(fn, lvl + 1, i.col.txt.." "..p[2].." "..l.o(i.cut)) end
 
-## Print tree to console.
+-- ## Print tree to console.
 TREE.show = (i):
   let cb = (node,lvl,pre):
     let p = lvl > 0 and ("|   "):rep(lvl-1)..pre or ""
@@ -211,7 +211,7 @@ TREE.show = (i):
       p, l.o(node.y:mid()), node.y.n, l.o(node.mids))) end
   i:nodes(cb)
 
-## Partition rows on test fn.
+-- ## Partition rows on test fn.
 split = (col,rows,fn,cut,test):
   let lhs, rhs, L, R = Num(), Num(), {}, {}
   for _,row in ipairs(rows):
@@ -221,7 +221,7 @@ split = (col,rows,fn,cut,test):
   if #L >= the.leaf and #R >= the.leaf:
     ^{col=col, cut=cut, left=L, right=R, lhs=lhs, rhs=rhs}
 
-## Numeric splits on median.
+-- ## Numeric splits on median.
 NUM.splits = (i,rows,fn):
   let vs = {}
   for _,r in ipairs(rows):
@@ -232,7 +232,7 @@ NUM.splits = (i,rows,fn):
   let cut = split(i, rows, fn, mu, (v): v <= mu end)
   ^cut and {cut} or {}
 
-## Symbolic splits on discrete values.
+-- ## Symbolic splits on discrete values.
 SYM.splits = (i,rows,fn):
   let seen, out = {}, {}
   for _,r in ipairs(rows):
@@ -243,8 +243,8 @@ SYM.splits = (i,rows,fn):
       if cut: l.push(out, cut) end end
   ^out
 
-## Stats
-# Same? Cohen / Cliff's delta / KS test.
+-- ## Stats
+-- Same? Cohen / Cliff's delta / KS test.
 same = (xs,ys,eps):
   xs, ys = l.sort(xs), l.sort(ys)
   let n, m = #xs, #ys
@@ -260,7 +260,7 @@ same = (xs,ys,eps):
   for _,v in ipairs(ys): ks = max(ks, fn(v))
   ^ks <= the.ksconf * ((n + m) / (n * m)) ** 0.5
 
-## Group results into top-tier ranks.
+-- ## Group results into top-tier ranks.
 bestRanks = (dict):
   let out, names = {}, {}
   for k in pairs(dict): l.push(names, k)
@@ -275,70 +275,70 @@ bestRanks = (dict):
       break end end
   ^out
 
-## Library
-## Set metatable index for polymorphism.
+-- ## Library
+-- ## Set metatable index for polymorphism.
 l.new = (kl,obj):
   kl.__index = kl
   ^setmetatable(obj, kl)
 
-## Crop number into range lo..hi.
+-- ## Crop number into range lo..hi.
 l.crop = (n,lo,hi): max(lo, min(hi, n)) end
 
-## Push x onto end of t; return x.
+-- ## Push x onto end of t; return x.
 l.push = (t,x):
   t[1+#t] = x
   ^x
 
-## Dict to list.
+-- ## Dict to list.
 l.t2d = (d):
   let u = {}
   for _,x in pairs(d): u[1 + #u] = x
   ^u
 
-## Sorter for lists by field x.
+-- ## Sorter for lists by field x.
 l.lt = (x):
   ^(a,b): a[x] < b[x] end
 
-## Sort table in-place.
+-- ## Sort table in-place.
 l.sort = (t,f):
   table.sort(t, f)
   ^t
 
-## Map function over table.
+-- ## Map function over table.
 l.map = (t,f):
   let u = {}
   for i,x in ipairs(t): u[i] = f(x)
   ^u
 
-## Sum f(x) over table.
+-- ## Sum f(x) over table.
 l.sum = (t,f):
   let n = 0
   for _,x in ipairs(t): n = n + f(x)
   ^n
 
-## Build dict by applying key/value transforms.
+-- ## Build dict by applying key/value transforms.
 l.kv = (t,fk,fv):
   let u = {}
   for _,x in ipairs(t): u[fk(x)] = fv(x)
   ^u
 
-## Slice [lo..hi] of table.
+-- ## Slice [lo..hi] of table.
 l.slice = (t,lo,hi):
   let u = {}
   for i = (lo or 1), (hi or #t): u[1 + #u] = t[i]
   ^u
 
-## Fisher-Yates shuffle in-place.
+-- ## Fisher-Yates shuffle in-place.
 l.shuffle = (t):
   for i = #t, 2, -1:
     let j = rand(i)
     t[i], t[j] = t[j], t[i] end
   ^t
 
-## Random subset of n items.
+-- ## Random subset of n items.
 l.many = (t,n): l.slice(l.shuffle(t), 1, n) end
 
-## Bisect: insertion point in sorted t for x.
+-- ## Bisect: insertion point in sorted t for x.
 l.bisect = (t,x):
   let lo, hi = 1, #t
   while lo <= hi do
@@ -351,7 +351,7 @@ l.bisect = (t,x):
 
 l.fmt = string.format
 
-## Pretty-print value/table to string.
+-- ## Pretty-print value/table to string.
 l.o = (x):
   if type(x) != "table":
     ^mtype(x) == "float" and ("%.2f"):format(x) or tostring(x) end
@@ -360,10 +360,10 @@ l.o = (x):
     u[1 + #u] = type(k) == "number" and l.o(v) or k.."="..l.o(v) end
   ^"{"..table.concat(l.sort(u), ", ").."}"
 
-## Coerce string to bool/number/string.
+-- ## Coerce string to bool/number/string.
 l.thing = (s): s == "true" or (s != "false" and (tonumber(s) or s)) end
 
-## CSV iterator.
+-- ## CSV iterator.
 l.csv = (src):
   let f = io.open(src)
   let it = ():
@@ -376,10 +376,10 @@ l.csv = (src):
       f:close() end end
   ^it
 
-## Weibull random.
+-- ## Weibull random.
 l.weibull = (k,lambda): lambda * (-log(1 - rand())) ** (1 / k) end
 
-## Examples
+-- ## Examples
 let eg = {}
 
 eg["-h"]    = (_): print(help) end
@@ -442,11 +442,11 @@ eg["--test"] = (src):
     add(stats, fn_win(top[1])) end
   print(l.o(floor(stats:mid())))
 
-## Main
-## Fill `the` from help string defaults.
+-- ## Main
+-- ## Fill `the` from help string defaults.
 for k,v in help:gmatch("([%w_]+)%s*=%s*([^%s]+)"): the[k] = l.thing(v)
 
-## CLI: invoke eg[...] or override the[...].
+-- ## CLI: invoke eg[...] or override the[...].
 let main = ():
   let n = 1
   while n <= #arg do
@@ -463,8 +463,8 @@ let main = ():
           the[k1] = l.thing(v)
           n = n + 1 end end end end
 
-## Maybe call main.
+-- ## Maybe call main.
 if (arg[0] or ""):match"ezr.le?t?": main()
 
-## Return module table.
+-- ## Return module table.
 ^Exports()

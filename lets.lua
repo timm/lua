@@ -116,26 +116,21 @@ lets = function(file)
   local h = io.open(file); local src = h:read"*a"; h:close()
   if src:sub(1,2) == "#!" then src = src:gsub("^[^\n]*\n","",1) end -- strip shebang
   local out = {}
+  -- Each paragraph = optional leading `--` comments + code. Blank line closes it.
   for para in (src.."\n\n"):gmatch"(.-)\n\n" do
-    local f = para:match"^[^\n]*" or ""
-    if f:match"^[ \t]" then
-      -- whole paragraph is a doc block (first line indented)
-      for ln in para:gmatch"[^\n]+" do out[#out+1]="-- "..ln end
-    else
-      local depth = 0
-      for ln in para:gmatch"[^\n]+" do
-        local pad, body = ln:match"^( *)(.*)"
-        body = body:gsub("^\f+", "")                           -- drop leading formfeeds
-        if body:sub(1,1) == "#" then
-          out[#out+1] = pad.."-- "..body                       -- line-level comment
-        elseif body ~= "" then
-          local r = line(body)
-          out[#out+1] = pad..r
-          depth = depth + delta(r)
-        end
+    local depth = 0
+    for ln in para:gmatch"[^\n]+" do
+      local pad, body = ln:match"^( *)(.*)"
+      body = body:gsub("^\f+", "")                             -- drop leading formfeeds
+      if body:sub(1,2) == "--" then
+        out[#out+1] = pad..body                                -- Lua-style comment, pass through
+      elseif body ~= "" then
+        local r = line(body)
+        out[#out+1] = pad..r
+        depth = depth + delta(r)
       end
-      while depth > 0 do out[#out+1]="end"; depth=depth-1 end  -- paragraph closes rest
     end
+    while depth > 0 do out[#out+1]="end"; depth=depth-1 end    -- paragraph closes rest
     out[#out+1] = ""
   end
 
