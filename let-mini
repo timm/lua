@@ -1,7 +1,0 @@
-#!/usr/bin/env lua
--- let-mini runner: transpile + run a .let file using lets-mini.
-package.path = (debug.getinfo(1).source:match"@?(.*/)" or "./").."?.lua;"..package.path
-local lets = require"lets-mini"
-local file = table.remove(arg, 1) or error("usage: let-mini <file.let> [args...]")
-arg[0] = file
-lets(file)

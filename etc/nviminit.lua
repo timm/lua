@@ -52,8 +52,8 @@ require("lazy").setup({
     config = function() vim.cmd("colorscheme kanagawa") end },
 })
 
--- Load the "let" language filetype + syntax plugin.
-local letdir = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":h")
-package.path = letdir .. "/?.lua;" .. package.path
-local ok, nvimlet = pcall(require, "nvimlet")
-if ok then nvimlet.setup() end
+-- Load the "bang" language filetype + syntax plugin.
+local bangdir = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":h")
+package.path = bangdir .. "/?.lua;" .. package.path
+local ok, nvimbang = pcall(require, "nvimbang")
+if ok then nvimbang.setup() end

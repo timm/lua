@@ -1,19 +1,11 @@
-#!/usr/bin/env ./let-mini
--- vim: ft=let
--- ezr-mini.let : explainable multi-objective optimization (mini-let port).
+#!/usr/bin/env ./bang
+-- vim: ft=bang
+-- ezr.bang : explainable multi-objective optimization (bang port of ezr.lua)
 
--- Module-scope locals
-local the, NUM, SYM, COLS, DATA, TREE, l
-local Tree, Sym, Num, Cols, Data
-local add, sub, adds, mink, wins, split, same, bestRanks
-local abs, min, max, log, exp, floor, rand, randomseed, mtype
+let the, DATA, NUM, SYM, TREE, l
 
-abs, min, max, log, exp   = math.abs, math.min, math.max, math.log, math.exp
-floor, rand, randomseed   = math.floor, math.random, math.randomseed
-mtype                     = math.type
-
-local help = [[
-ezr-mini.let : explainable multi-objective optimization
+let help = [[
+ezr.bang : explainable multi-objective optimization
 (c) 2026, Tim Menzies <timm@ieee.org>, MIT license
   -B Budget=50     initial building budget
   -C Check=5       final check budget
@@ -26,50 +18,74 @@ ezr-mini.let : explainable multi-objective optimization
   -S Show=30       width LHS tree display
   -h               show help
 ]]
-the  = {}
-l    = {}
-COLS = {}
+the = {}
+
+-- ## Registry
+-- Forward declarations.
+l = {}
+let COLS = {}
+let Tree, Sym, Num, Cols, Data
+let add, sub, adds, mink, wins, split, same, bestRanks
+
+-- Math shortcuts.
+let abs,min,max,log,exp   = math.abs, math.min, math.max, math.log, math.exp
+let floor,rand,randomseed = math.floor, math.random, math.randomseed
+let mtype                 = math.type
+
+-- Structs
 NUM  = {}
 SYM  = {}
 DATA = {}
 TREE = {}
 
--- Classes / constructors
-
+-- ## Classes
+-- Tree node with scoring fn.
 Tree = λ(fn_score) ^l.new(TREE, {score=fn_score}) !
 
+-- Symbolic (categorical) column.
 Sym = λ(s,n) ^l.new(SYM, {txt=s or "", at=n or 0, has={}, n=0}) !
 
-Num = λ(s,n) ^l.new(NUM, {txt=s or "", at=n or 0, n=0, mu=0, m2=0, heaven=s and s:match"-$" and 0 or 1}) !
+-- Numeric column. trailing "-" => minimize (heaven=0).
+Num = λ(s,n)
+  ^l.new(NUM, {txt=s or "", at=n or 0, n=0, mu=0, m2=0,
+                heaven=s and s:match"-$" and 0 or 1}) !
 
+-- Names list -> columns (Num/Sym; x/y/all).
 Cols = λ(ss_names)
   let xs,ys,all = {},{},{}
   for n,s in ipairs(ss_names) do
-    let col = l.push(all, (s:match"^[A-Z]" and Num or Sym)(s,n))
-    if (not s:match"X$") l.push(s:match"[%+%-!]$" and ys or xs, col) !!
+    let col = l.push(all,
+                     (s:match"^[A-Z]" and Num or Sym)(s,n))
+    if (not s:match"X$")
+       l.push(s:match"[%+%-!]$" and ys or xs, col) !!
   ^l.new(COLS, {x=xs, y=ys, all=all, names=ss_names}) !
 
+-- Data container: rows + summarized columns.
 Data = λ(src)
   let data = l.new(DATA, {rows={}, cols=nil, _mid=nil})
-  if (type(src) == "string") for row in l.csv(src) do add(data, row) !
-  else for _,row in ipairs(src or {}) do add(data, row) !!
+  if (type(src) == "string")
+    for row in l.csv(src) do
+      add(data, row) !
+  else
+    for _,row in ipairs(src or {}) do
+      add(data, row) !!
   ^data !
 
+-- Clone: new Data with same column structure.
 DATA.clone = λ(i,rows) ^adds(rows or {}, Data({i.cols.names})) !
 
--- Update
+-- ## Update
+-- Remove a value: just adding with -1.
+sub = λ(i,v) i:add(v, -1) !
 
-sub = λ(i,v) ^i:add(v, -1) !
+-- Bulk-add values to summary (defaults Num()).
+adds = λ(vs, it) =
+  it ?= Num(); [add(it,v) for _,v in pairs(vs or {})]; ^it !
 
-adds = λ(vs, summary)
-  summary = summary or Num()
-  for _,v in ipairs(vs or {}) do add(summary, v) !
-  ^summary !
+-- Add value to counter / row to dataset.
+add = λ(i,v,w) if (v ~= "?") i:_add(v, w or 1) ! ^v !
 
-add = λ(i,v,w)
-  if (v ~= "?") i:_add(v, w or 1) !
-  ^v !
-
+-- NUM update: incremental mean/variance.
 NUM._add = λ(i,v,w)
   i.n = i.n + w
   if (w < 0 and i.n <= 1)
@@ -79,12 +95,15 @@ NUM._add = λ(i,v,w)
     i.mu = i.mu + w * err / i.n
     i.m2 = i.m2 + w * err * (v - i.mu) !!
 
+-- SYM update: counts.
 SYM._add = λ(i,v,w) i.has[v] = w + (i.has[v] or 0) !
 
-COLS._add = λ(i,row,w)
-  for _,col in ipairs(i.all) do add(col, row[col.at], w) !
+-- COLS update: each col with row[col.at].
+COLS._add = λ(i,row,w) 
+  [add(col, row[col.at], w) for _,col in ipairs(i.all)]
   ^row !
 
+-- DATA update: first row sets columns; later rows update stats.
 DATA._add = λ(i,row,w)
   if (not i.cols)
     i.cols = Cols(row)
@@ -95,85 +114,109 @@ DATA._add = λ(i,row,w)
       l.push(i.rows, row)
     else
       for n,r in ipairs(i.rows) do
-        if (r == row) table.remove(i.rows, n); break !!!!!
+        if (r == row)
+          table.remove(i.rows, n)
+          break !!!!!
 
--- Query
-
+-- ## Query
+-- Mean for nums.
 NUM.mid = λ(i) ^i.mu !
 
+-- Mode for syms.
 SYM.mid = λ(i)
   let most, mode = -1, nil
   for v,n in pairs(i.has) do
-    if (n > most) most, mode = n, v !!
+    if (n > most)
+      most, mode = n, v !!
   ^mode !
 
+-- Midpoints across all columns.
 DATA.mid = λ(i)
   i._mid = i._mid or l.map(i.cols.all, λ(col) ^col:mid() !)
   ^i._mid !
 
-NUM.spread = λ(i) ^i.n > 1 and (max(0, i.m2) / (i.n - 1)) ** 0.5 or 0 !
+-- Spread: stdev for nums.
+NUM.spread = λ(i) 
+  ^i.n > 1 and (max(0, i.m2) / (i.n - 1)) ** 0.5 or 0 !
 
-SYM.spread = λ(i)
+-- Spread: entropy for syms.
+SYM.spread = λ(i) 
   let n = 0
-  for _,v in pairs(i.has) do n = n + v / i.n * log(v / i.n, 2) !
-  ^-n !
+  for _,v in pairs(i.has) do n = n - v/i.n * log(v/i.n,2) ! 
+  ^n !
 
+-- Sigmoid normalization.
 NUM.norm = λ(i,v)
-  if (v == "?") ^v !
+  if (v == "?")
+    ^v !
   let z = (v - i.mu) / (i:spread() + 1e-32)
   ^1 / (1 + exp(-1.7 * l.crop(z, -3, 3))) !
 
+-- Minkowski distance to ideal goal.
 DATA.disty = λ(i,row)
   let fn = λ(col) ^abs(col:norm(row[col.at]) - col.heaven) ** the.p !
   ^(l.sum(i.cols.y, fn) / #i.cols.y) ** (1 / the.p) !
 
+-- Probability of winning vs median row.
 wins = λ(data)
   let ys = l.sort(l.map(data.rows, λ(row) ^data:disty(row) !))
   let lo, n_mid = ys[1], ys[#ys // 2 + 1]
-  ^λ(row) ^floor(100 * (1 - ((data:disty(row) - lo) / (n_mid - lo + 1e-32)))) !!
+  ^λ(row) ^floor(100 * (1 - ((data:disty(row) - lo) 
+                        / (n_mid - lo + 1e-32)))) !!
 
--- Tree
-
+-- ## Tree
+-- Build variance-minimizing tree.
 TREE.build = λ(i,data,rows)
   let mid = data:clone(rows):mid()
   i.y = adds(l.map(rows, λ(r) ^i.score(r) !))
   i.mids = l.kv(data.cols.y, λ(c) ^c.txt !, λ(c) ^mid[c.at] !)
-  if (#rows < 2 * the.leaf) ^i !
+  if (#rows < 2 * the.leaf)
+    ^i !
   let best, bestW = nil, 1E32
   for _,col in ipairs(data.cols.x) do
     for _,cut in ipairs(col:splits(rows, i.score)) do
       let w = cut.lhs.n * cut.lhs:spread() + cut.rhs.n * cut.rhs:spread()
-      if (w < bestW and min(#cut.left, #cut.right) >= the.leaf) best, bestW = cut, w !!!
+      if (w < bestW and min(#cut.left, #cut.right) >= the.leaf)
+        best, bestW = cut, w !!!
   if (best)
     i.col, i.cut, i.at = best.col, best.cut, best.col.at
     i.left  = Tree(i.score):build(data, best.left)
     i.right = Tree(i.score):build(data, best.right) !
   ^i !
 
+-- ## Traverse tree to relevant leaf.
 TREE.leaf = λ(i,row)
-  if (not i.col) ^i !
+  if (not i.col)
+    ^i !
   let v = row[i.at]
-  if (v == "?") ^i.left:leaf(row) !
+  if (v == "?")
+    ^i.left:leaf(row) !
   let ok = i.col.mu and (v <= i.cut) or (v == i.cut)
   ^(ok and i.left or i.right):leaf(row) !
 
+-- ## Recursive node visitor.
 TREE.nodes = λ(i,fn,lvl,pre)
   lvl, pre = lvl or 0, pre or ""
   fn(i, lvl, pre)
-  if (not i.col) return !
+  if (not i.col)
+    ^ !
   let sy = i.col.mu and "<=" or "=="
   let sn = i.col.mu and ">" or "!="
-  let nds = l.sort({{i.left,sy},{i.right,sn}}, λ(a,b) ^a[1].y:mid() < b[1].y:mid() !)
+  let nds = l.sort({{i.left,sy},{i.right,sn}},
+                   λ(a,b) ^a[1].y:mid() < b[1].y:mid() !)
   for _,p in ipairs(nds) do
-    p[1]:nodes(fn, lvl + 1, i.col.txt++" "++p[2]++" "++l.o(i.cut)) !!
+    p[1]:nodes(fn, 
+              lvl + 1, i.col.txt.." "..p[2].." "..l.o(i.cut)) !!
 
+-- ## Print tree to console.
 TREE.show = λ(i)
   let cb = λ(node,lvl,pre)
-    let p = lvl > 0 and ("|   "):rep(lvl-1)++pre or ""
+    let p = lvl > 0 and ("|   "):rep(lvl-1)..pre or ""
     io.write(l.fmt("%-"..the.Show.."s ,%5.2f ,(%3d),  %s\n",
       p, l.o(node.y:mid()), node.y.n, l.o(node.mids))) !
   i:nodes(cb) !
 
+-- ## Partition rows on test fn.
 split = λ(col,rows,fn,cut,test)
   let lhs, rhs, L, R = Num(), Num(), {}, {}
   for _,row in ipairs(rows) do
@@ -183,16 +226,20 @@ split = λ(col,rows,fn,cut,test)
   if (#L >= the.leaf and #R >= the.leaf)
     ^{col=col, cut=cut, left=L, right=R, lhs=lhs, rhs=rhs} !!
 
+-- ## Numeric splits on median.
 NUM.splits = λ(i,rows,fn)
   let vs = {}
   for _,r in ipairs(rows) do
-    if (r[i.at] ~= "?") l.push(vs, r[i.at]) !!
-  if (#vs < 2) ^{} !
+    if (r[i.at] ~= "?")
+      l.push(vs, r[i.at]) !!
+  if (#vs < 2)
+    ^{} !
   l.sort(vs)
   let mu = vs[#vs // 2 + 1]
   let cut = split(i, rows, fn, mu, λ(v) ^v <= mu !)
   ^cut and {cut} or {} !
 
+-- ## Symbolic splits on discrete values.
 SYM.splits = λ(i,rows,fn)
   let seen, out = {}, {}
   for _,r in ipairs(rows) do
@@ -200,30 +247,38 @@ SYM.splits = λ(i,rows,fn)
     if (v ~= "?" and not seen[v])
       seen[v] = true
       let cut = split(i, rows, fn, v, λ(x) ^x == v !)
-      if (cut) l.push(out, cut) !!!
+      if (cut)
+        l.push(out, cut) !!!
   ^out !
 
--- Stats
-
+-- ## Stats
+-- Same? Cohen / Cliff's delta / KS test.
 same = λ(xs,ys,eps)
   xs, ys = l.sort(xs), l.sort(ys)
   let n, m = #xs, #ys
-  if (abs(xs[n // 2 + 1] - ys[m // 2 + 1]) <= eps) ^true !
+  if (abs(xs[n // 2 + 1] - ys[m // 2 + 1]) <= eps)
+    ^true !
   let ngt, nlt = 0, 0
   for _,v in ipairs(xs) do
     ngt = ngt + l.bisect(ys, v)
     nlt = nlt + (m - l.bisect(ys, v + 1e-32)) !
-  if (abs(ngt - nlt) / (n * m) > the.cliffs) ^false !
+  if (abs(ngt - nlt) / (n * m) > the.cliffs)
+    ^false !
   let ks = 0
   let fn = λ(v) ^abs(l.bisect(xs,v)/n - l.bisect(ys,v)/m) !
-  for _,v in ipairs(xs) do ks = max(ks, fn(v)) !
-  for _,v in ipairs(ys) do ks = max(ks, fn(v)) !
+  for _,v in ipairs(xs) do
+    ks = max(ks, fn(v)) !
+  for _,v in ipairs(ys) do
+    ks = max(ks, fn(v)) !
   ^ks <= the.ksconf * ((n + m) / (n * m)) ** 0.5 !
 
+-- ## Group results into top-tier ranks.
 bestRanks = λ(dict)
   let out, names = {}, {}
-  for k in pairs(dict) do l.push(names, k) !
-  l.sort(names, λ(a,b) ^adds(dict[a]):mid() < adds(dict[b]):mid() !)
+  for k in pairs(dict) do
+    l.push(names, k) !
+  l.sort(names, 
+        λ(a,b) ^adds(dict[a]):mid() < adds(dict[b]):mid() !)
   let eps  = adds(dict[names[1]]):spread() * the.eps
   let rows = dict[names[1]]
   out[names[1]] = adds(rows, Num(names[1]))
@@ -234,86 +289,94 @@ bestRanks = λ(dict)
       break !!
   ^out !
 
--- Library
+-- ## Library
+-- ## Set metatable index for polymorphism.
+l.new = λ(kl,obj) kl.__index = kl; ^setmetatable(obj, kl) !
 
-l.new = λ(kl,obj) kl.__index = kl; return setmetatable(obj, kl) !
-
+-- ## Crop number into range lo..hi.
 l.crop = λ(n,lo,hi) ^max(lo, min(hi, n)) !
 
-l.push = λ(t,x) t[1+#t] = x; return x !
+-- ## Push x onto end of t; return x.
+l.push = λ(t,x) t[1+#t] = x; ^x !
 
-l.t2d = λ(d)
-  let u = {}
-  for _,x in pairs(d) do u[1 + #u] = x !
+-- ## Dict to list.
+l.t2d = λ(d) ^[x for _,x in d] !
+
+-- ## Sorter for lists by field x.
+l.lt = λ(x)
+  ^λ(a,b) ^a[x] < b[x] !!
+
+-- ## Sort table in-place.
+l.sort = λ(t,f) table.sort(t, f); ^t !
+
+-- ## Map function over table.
+l.map = λ(t,f) ^[f(x) for x in t] !
+
+-- ## Sum f(x) over table.
+l.sum = λ(t,f) 
+  let n = 0; for _,x in ipairs(t) do n = n + f(x) ! ^n !
+
+-- ## Build dict by applying key/value transforms.
+l.kv = λ(t,fk,fv) 
+  let u = {}; for _,x in ipairs(t) do u[fk(x)] = fv(x) ! ^u !
+
+-- ## Slice [lo..hi] of table.
+l.slice = λ(t,lo,hi) 
+  let u={}; for i = (lo or 1), (hi or #t) do u[1 + #u] = t[i] !
   ^u !
 
-l.lt = λ(x) ^λ(a,b) ^a[x] < b[x] !!
-
-l.sort = λ(t,f) table.sort(t, f); return t !
-
-l.map = λ(t,f)
-  let u = {}
-  for i,x in ipairs(t) do u[i] = f(x) !
-  ^u !
-
-l.sum = λ(t,f)
-  let n = 0
-  for _,x in ipairs(t) do n = n + f(x) !
-  ^n !
-
-l.kv = λ(t,fk,fv)
-  let u = {}
-  for _,x in ipairs(t) do u[fk(x)] = fv(x) !
-  ^u !
-
-l.slice = λ(t,lo,hi)
-  let u = {}
-  for i = (lo or 1), (hi or #t) do u[1 + #u] = t[i] !
-  ^u !
-
-l.shuffle = λ(t)
-  for i = #t, 2, -1 do
-    let j = rand(i)
-    t[i], t[j] = t[j], t[i] !
+-- ## Fisher-Yates shuffle in-place.
+l.shuffle = λ(t) 
+  for i = #t, 2, -1 do let j = rand(i); t[i], t[j] = t[j], t[i] ! 
   ^t !
 
+-- ## Random subset of n items.
 l.many = λ(t,n) ^l.slice(l.shuffle(t), 1, n) !
 
+-- ## Bisect: insertion point in sorted t for x.
 l.bisect = λ(t,x)
   let lo, hi = 1, #t
-  while (lo <= hi) do
+  while lo <= hi do
     let m = (lo + hi) // 2
-    if (t[m] <= x) lo = m + 1
-    else hi = m - 1 !!
+    if (t[m] <= x)
+      lo = m + 1
+    else
+      hi = m - 1 !!
   ^lo - 1 !
 
 l.fmt = string.format
 
+-- ## Pretty-print value/table to string.
 l.o = λ(x)
-  if (type(x) ~= "table") ^mtype(x) == "float" and ("%.2f"):format(x) or tostring(x) !
+  if (type(x) ~= "table")
+    ^mtype(x) == "float" and ("%.2f"):format(x) or tostring(x) !
   let u = {}
   for k,v in pairs(x) do
     u[1 + #u] = type(k) == "number" and l.o(v) or k.."="..l.o(v) !
   ^"{"..table.concat(l.sort(u), ", ").."}" !
 
-l.thing = λ(s) ^s == "true" or (s ~= "false" and (tonumber(s) or s)) !
+-- ## Coerce string to bool/number/string.
+l.thing = λ(s) 
+  ^s == "true" or (s ~= "false" and (tonumber(s) or s)) !
 
+-- ## CSV iterator.
 l.csv = λ(src)
   let f = io.open(src)
   let it = λ()
     let s = f:read()
     if (s)
       let t = {}
-      for x in s:gmatch"[^,]+" do l.push(t, l.thing(x:match"^%s*(.-)%s*$")) !
-      return t
+      for x in s:gmatch"[^,]+" do
+        l.push(t, l.thing(x:match"^%s*(.-)%s*$")) !
+      ^t
     else
       f:close() !!
   ^it !
 
-l.weibull = λ(k,lambda) ^lambda * (-log(1 - rand())) ** (1 / k) !
+-- ## Weibull random.
+l.weibull = λ(k,lambda) ^lambda * (-log(1- rand())) ** (1 / k) !
 
--- Examples
-
+-- ## Examples
 let eg = {}
 
 eg["-h"]    = λ(_) print(help) !
@@ -322,7 +385,8 @@ eg["--the"] = λ(_) print(l.o(the)) !
 eg["--all"] = λ(arg)
   let ss = {}
   for k in pairs(eg) do
-    if (k ~= "--all") l.push(ss, k) !!
+    if (k ~= "--all")
+      l.push(ss, k) !!
   for _,k in ipairs(l.sort(ss)) do
     print("\n"..k)
     randomseed(the.seed)
@@ -331,7 +395,8 @@ eg["--all"] = λ(arg)
 eg["--csv"] = λ(f)
   let n = 0
   for r in l.csv(f) do
-    if (n % 30 == 0) print(l.o(r)) !
+    if (n % 30 == 0)
+      print(l.o(r)) !
     n = n + 1 !!
 
 eg["--ranks"] = λ(_)
@@ -341,7 +406,8 @@ eg["--ranks"] = λ(_)
     dict[name] = {}
     let k      = (n <= 5 and 2 or 1)
     let lambda = (n <= 5 and 10 or 20)
-    for _ = 1, 50 do l.push(dict[name], l.weibull(k, lambda)) !!
+    for _ = 1, 50 do
+      l.push(dict[name], l.weibull(k, lambda)) !!
   print("\nTop Tier Treatments:")
   let u = l.sort(l.t2d(bestRanks(dict)), l.lt"mu")
   for _,num in ipairs(u) do
@@ -349,7 +415,8 @@ eg["--ranks"] = λ(_)
 
 eg["--data"] = λ(f)
   let d = Data(f)
-  for _,c in ipairs(d.cols.y) do print(c.txt, l.o(c:mid())) !!
+  for _,c in ipairs(d.cols.y) do
+    print(c.txt, l.o(c:mid())) !!
 
 eg["--tree"] = λ(f)
   let d  = Data(f)
@@ -360,42 +427,51 @@ eg["--tree"] = λ(f)
 eg["--test"] = λ(src)
   let data  = Data(src)
   let stats = Num("win")
-  if (not data.cols) return !
+  if (not data.cols)
+    return !
   let fn_win = wins(data)
   for _ = 1, 20 do
     l.shuffle(data.rows)
     let n = #data.rows // 2
     let test = l.slice(data.rows, n + 1)
-    let d2   = data:clone(l.slice(data.rows, 1, min(n, the.Budget)))
+    let d2   = data:clone(
+                 l.slice(data.rows, 1, min(n, the.Budget)))
     let f_dist  = λ(r) ^d2:disty(r) !
     let node    = Tree(f_dist):build(d2, d2.rows)
-    let f_leaf  = λ(a,b) ^node:leaf(a).y:mid() < node:leaf(b).y:mid() !
+    let f_leaf  = λ(a,b) 
+                   ^node:leaf(a).y:mid() < node:leaf(b).y:mid() !
     let f_dist2 = λ(a,b) ^d2:disty(a) < d2:disty(b) !
     l.sort(test, f_leaf)
     let top = l.sort(l.slice(test, 1, the.Check), f_dist2)
     add(stats, fn_win(top[1])) !
   print(l.o(floor(stats:mid()))) !
 
--- Main
+-- ## Main
+-- ## Fill `the` from help string defaults.
+for k,v in help:gmatch("([%w_]+)%s*=%s*([^%s]+)") do
+  the[k] = l.thing(v) !
 
-for k,v in help:gmatch("([%w_]+)%s*=%s*([^%s]+)") do the[k] = l.thing(v) !
-
+-- ## CLI: invoke eg[...] or override the[...].
 let main = λ()
   let n = 1
-  while (n <= #arg) do
+  while n <= #arg do
     let k = arg[n]
     let v = arg[n+1]
     n = n + 1
     if (eg[k])
       randomseed(the.seed)
       eg[k](v and l.thing(v) or nil)
-      if (v and not eg[v]) n = n + 1 !
+      if (v and not eg[v])
+        n = n + 1 !
     else
       for k1 in pairs(the) do
         if (k == "-"..k1:sub(1,1))
           the[k1] = l.thing(v)
           n = n + 1 !!!!!
 
-if ((arg[0] or ""):match"ezr") main() !
+-- ## Maybe call main.
+if ((arg[0] or ""):match"ezr%.bang")
+  main() !
 
-return {the=the, DATA=DATA, NUM=NUM, SYM=SYM, TREE=TREE, l=l}
+-- ## Return module table.
+^{the=the, DATA=DATA, NUM=NUM, SYM=SYM, TREE=TREE, l=l}

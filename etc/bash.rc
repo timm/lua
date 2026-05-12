@@ -1,4 +1,6 @@
 # ---- env -----------------------------------------------------------------
+
+export GIT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
 export EDITOR=nvim
 export HISTSIZE=100000
 export HISTFILESIZE=200000
@@ -26,7 +28,7 @@ bind '"\e[B": history-search-forward'
 PS1='🌙 $(basename $(dirname $PWD))/$(basename $PWD) $ '
 
 # ---- aliases -------------------------------------------------------------
-alias vi='nvim -u $I/etc/init.lua -p'
+alias vi='nvim -u $GIT_ROOT/etc/nviminit.lua  -p'
 alias ls='ls -G'
 alias ll='ls -lh'
 alias la='ls -lha'

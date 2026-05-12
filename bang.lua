@@ -1,8 +1,8 @@
--- lets-mini.lua : minimal "let" -> Lua. Uniform rules — no special positions.
+-- bang.lua : "bang" -> Lua transpiler.
 -- λ = function   ^ = return   ** = exponent   ++ = concat   ! = end
--- Bracketed conditions everywhere: `if (cond) body`, `elseif (cond) body`,
--- `while (cond) body`. Transpiler inserts `then`/`do` after the brackets.
--- No paragraph magic, no auto-end, no auto-return. Every block needs `<|`.
+-- Bracketed conditions: `if (cond) body !`, `elseif (cond) body !`,
+-- `while (cond) body !`. Transpiler inserts `then`/`do` after the brackets.
+-- `\` at line end joins next line (with blank-pad to preserve line numbers).
 local loaded = {}
 
 return function(file)
