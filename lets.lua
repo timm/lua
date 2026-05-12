@@ -1,99 +1,73 @@
--- lets.lua : tiny "let" -> Lua. Explicit `end` everywhere. No paragraph magic.
-local lets, loaded = nil, {}
+-- lets-mini.lua : minimal "let" -> Lua. Uniform rules — no special positions.
+-- λ = function   ^ = return   ** = exponent   ++ = concat   ! = end
+-- Bracketed conditions everywhere: `if (cond) body`, `elseif (cond) body`,
+-- `while (cond) body`. Transpiler inserts `then`/`do` after the brackets.
+-- No paragraph magic, no auto-end, no auto-return. Every block needs `<|`.
+local loaded = {}
 
-lets = function(file)
+return function(file)
   if loaded[file] then return loaded[file] end
 
-  local function expr(s)
-    s = s:gsub("%[(.-) for (.-) in (.-) if (.-)%]",
-      "(function() local _r={} for %2 in pairs(%3) do if %4 then _r[#_r+1]=%1 end end return _r end)()")
-    s = s:gsub("%[(.-) for (.-) in (.-)%]",
-      "(function() local _r={} for %2 in pairs(%3) do _r[#_r+1]=%1 end return _r end)()")
-    s = s:gsub("%*%*","\0"):gsub("\0","^")                     -- ** -> ^
-    return s
-  end
-
-  local function ret(bd)
-    bd = bd:gsub("^%^%s?", "return ")
-    bd = bd:gsub(";%s*%^%s?", "; return ")
-    return bd
+  local function comp(e,v,i,c)
+    if not v:find"," and not i:find"%(" then
+      v, i = "_,"..v, "ipairs("..i..")"
+    elseif not i:find"%(" then
+      i = "pairs("..i..")"
+    end
+    local guard = c and ("if "..c.." then ") or ""
+    local close = c and "end " or ""
+    return ("(function() local _r={} for %s in %s do %s_r[#_r+1]=%s %send return _r end)()")
+           :format(v, i, guard, e, close)
   end
 
   local function line(b)
-    b = b:gsub("^(%w+)%s*%?=%s*(.+)$",  "if %1 == nil then %1 = %2 end")
-    b = b:gsub("^(%w+)%s*([%+%-%*/])=%s*(.+)$", "%1 = %1 %2 %3")
-    b = b:gsub("^if%s+(.-):%s*$",      "if %1 then")
-    b = b:gsub("^elseif%s+(.-):%s*$",  "elseif %1 then")
-    b = b:gsub("^else:%s*$",           "else")
-    b = b:gsub("^for%s+(.-)%s+in%s+(.-):%s*$", function(v,it)
-      local i = (it:find"%(" or it:find'"' or it:find"'") and it or "pairs("..it..")"
-      return "for "..v.." in "..i.." do" end)
-    b = b:gsub("^for%s+(.-)%s*=%s*(.-):%s*$", function(v,it)
-      return "for "..v.." = "..it.." do" end)
-    -- inline lambda: (args): body end   (single-statement bodies; no nested inline lambdas)
-    b = b:gsub("%(([^%(%)]-)%):%s+(.-)%s+end", function(a,bd)
-      return "function("..a..") "..ret(bd).." end" end)
-    -- let-named-fn block opener
-    b = b:gsub("^let%s+(%w+)%s*=%s*%((.-)%):%s*$", function(n,a)
-      return "local function "..n.."("..a..")" end)
-    b = b:gsub("^let%s",  "local ")
-    b = b:gsub("^%^%s?",  "return ")
-    -- named-fn block opener: bracket-LHS uses assignment form, dotted/plain uses function form
-    b = b:gsub('^([%w_%.%[%]"\'%-]+)%s*=%s*%((.-)%):%s*$', function(n,a)
-      if n:find"%[" then return n.." = function("..a..")" end
-      return "function "..n.."("..a..")" end)
-    return expr(b)
-  end
-
-  local function delta(s)
-    s = s:gsub('"[^"]*"', ""):gsub("'[^']*'", "")
-    s = s:gsub("%-%-.*$", "")
-    local d = 0
-    for _ in s:gmatch"%f[%w]then%f[%W]"     do d = d + 1 end
-    for _ in s:gmatch"%f[%w]do%f[%W]"       do d = d + 1 end
-    for _ in s:gmatch"%f[%w]function%f[%W]" do d = d + 1 end
-    for _ in s:gmatch"%f[%w]end%f[%W]"      do d = d - 1 end
-    for _ in s:gmatch"%f[%w]elseif%f[%W]"   do d = d - 1 end
-    return d
-  end
-
-  local h = io.open(file); local src = h:read"*a"; h:close()
-  if src:sub(1,2) == "#!" then src = "--"..src:sub(3) end          -- shebang -> comment
-  local out, depth = {}, 0
-  for ln in (src.."\n"):gmatch"([^\n]*)\n" do
-    local pad, body = ln:match"^( *)(.*)"
-    body = body:gsub("^\f+", "")
-    if body:sub(1,2) == "--" then
-      out[#out+1] = pad..body
-    elseif body == "" then
-      out[#out+1] = ""
-    else
-      local r = line(body)
-      out[#out+1] = pad..r
-      depth = depth + delta(r)
+    if b:match"^%s*%-%-" or b:match"^%s*$" then return b end
+    local strs = {}
+    local function hide(m) strs[#strs+1]=m; return "\3"..#strs.."\3" end
+    b = b:gsub('%[%[.-%]%]', hide)       -- long strings
+    b = b:gsub('"[^"]*"',    hide)        -- double-quoted
+    b = b:gsub("'[^']*'",    hide)        -- single-quoted
+    local cmt = ""
+    b = b:gsub("(%s*%-%-.*)$", function(c) cmt = c; return "" end)
+    b = b:gsub("^(%s*)(%w+)%s*%?=%s*([^;]+)",        "%1if %2 == nil then %2 = %3 end")
+    b = b:gsub("(%w+)%s*([%+%-%*/])=%s+(%S+)",       "%1 = %1 %2 %3")
+    b = b:gsub("λ","function")
+    b = b:gsub("function(%b())%s*=%s*$", "function%1")  -- optional `=` fence after args
+    b = b:gsub("%*%*","\1"); b = b:gsub("%^%s*","return "); b = b:gsub("\1","^")
+    b = b:gsub("%+%+","..")
+    b = b:gsub("!"," end ")
+    b = b:gsub("%f[%w]let%s","local ")
+    local function brkt(kw, close)
+      b = b:gsub("(%f[%w]"..kw.."%s*%b())(%s+)(%w+)", function(p,g,w)
+        if w == close then return nil end
+        return p.." "..close..g..w
+      end)
+      b = b:gsub("(%f[%w]"..kw.."%s*%b())%s*$", "%1 "..close)
     end
+    brkt("if",     "then")
+    brkt("elseif", "then")
+    brkt("while",  "do")
+    b = b:gsub("%[(.-) for (.-) in (.-) if (.-)%]", comp)
+    b = b:gsub("%[(.-) for (.-) in (.-)%]", comp)
+    b = b:gsub("\3(%d+)\3", function(n) return strs[tonumber(n)] end)
+    return b .. cmt
   end
 
-  if depth ~= 0 then
-    io.stderr:write(("let: block balance off by %d in %s\n"):format(depth, file))
-  end
-
-  local lua = table.concat(out, "\n")
+  local lua = io.open(file):read"*a":gsub("^#!","--")
+                                    :gsub("([^\n]*)\\\n([^\n]*)\n", "%1 %2\n\n")
+                                    :gsub("[^\n]+", line)
   local fn, err = load(lua, file)
   if not fn then
     local n = tonumber((err or ""):match":(%d+):")
     if n then
-      local lines = {}
-      for s in lua:gmatch"[^\n]*" do lines[#lines+1] = s end
-      local lo, hi = math.max(1, n-2), math.min(#lines, n+2)
-      for i = lo, hi do
-        io.stderr:write(("%4d %s %s\n"):format(i, i==n and ">>" or "  ", lines[i] or ""))
+      local ls = {}
+      for s in lua:gmatch"[^\n]*" do ls[#ls+1] = s end
+      for i = math.max(1,n-2), math.min(#ls,n+2) do
+        io.stderr:write(("%4d %s %s\n"):format(i, i==n and ">>" or "  ", ls[i] or ""))
       end
     end
     error(err)
   end
   loaded[file] = fn() or true
-  return loaded[file], lua
+  return loaded[file]
 end
-
-return lets
