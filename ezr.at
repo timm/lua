@@ -137,7 +137,7 @@ DATA.mid = @(i)
 
 -- Spread: stdev for nums.
 NUM.spread = @(i) 
-  !i.n > 1 and (max(0, i.m2) / (i.n - 1)) ** 0.5 or 0  end  
+  !i.n > 1 and (max(0, i.m2) / (i.n - 1)) ^ 0.5 or 0  end  
 
 -- Spread: entropy for syms.
 SYM.spread = @(i) 
@@ -154,8 +154,8 @@ NUM.norm = @(i,v)
 
 -- Minkowski distance to ideal goal.
 DATA.disty = @(i,row)
-  $fn = @(col) !abs(col:norm(row[col.at]) - col.heaven) ** the.p  end  
-  !(l.sum(i.cols.y, fn) / #i.cols.y) ** (1 / the.p)  end  
+  $fn = @(col) !abs(col:norm(row[col.at]) - col.heaven) ^ the.p  end  
+  !(l.sum(i.cols.y, fn) / #i.cols.y) ^ (1 / the.p)  end  
 
 -- Probability of winning vs median row.
 wins = @(data)
@@ -270,7 +270,7 @@ same = @(xs,ys,eps)
     ks = max(ks, fn(v))  end  
   for _,v in ipairs(ys) do
     ks = max(ks, fn(v))  end  
-  !ks <= the.ksconf * ((n + m) / (n * m)) ** 0.5  end  
+  !ks <= the.ksconf * ((n + m) / (n * m)) ^ 0.5  end  
 
 -- ## Group results into top-tier ranks.
 bestRanks = @(dict)
@@ -373,7 +373,7 @@ l.csv = @(src)
       f:close()  end   end   end
 
 -- ## Weibull random.
-l.weibull = @(k,lambda) !lambda * (-log(1- rand())) ** (1 / k)  end  
+l.weibull = @(k,lambda) !lambda * (-log(1- rand())) ^ (1 / k)  end  
 
 -- ## Examples
 $eg = {}
