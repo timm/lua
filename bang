@@ -1,7 +1,0 @@
-#!/usr/bin/env lua
--- bang runner: transpile + run a .bang file. forwards extra args.
-package.path = (debug.getinfo(1).source:match"@?(.*/)" or "./").."?.lua;"..package.path
-local bang = require"bang"
-local file = table.remove(arg, 1) or error("usage: bang <file.bang> [args...]")
-arg[0] = file
-bang(file)

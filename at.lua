@@ -1,7 +1,8 @@
--- bang.lua : "bang" -> Lua transpiler.
--- λ = function   ^ = return   ** = exponent   ++ = concat   ! = end
--- Bracketed conditions: `if (cond) body !`, `elseif (cond) body !`,
--- `while (cond) body !`. Transpiler inserts `then`/`do` after the brackets.
+-- at.lua : ".at" -> Lua transpiler.
+-- @ = function   $ = local   ! = return   . = end (followed by space/EOL)
+-- ** = exponent  ++ = concat
+-- Bracketed conditions: `if (cond) body .`, `elseif (cond) body .`,
+-- `while (cond) body .`. Transpiler inserts `then`/`do` after the brackets.
 -- `\` at line end joins next line (with blank-pad to preserve line numbers).
 local loaded = {}
 
@@ -29,14 +30,21 @@ return function(file)
     b = b:gsub("'[^']*'",    hide)        -- single-quoted
     local cmt = ""
     b = b:gsub("(%s*%-%-.*)$", function(c) cmt = c; return "" end)
-    b = b:gsub("^(%s*)(%w+)%s*%?=%s*([^;]+)",        "%1if %2 == nil then %2 = %3 end")
-    b = b:gsub("(%w+)%s*([%+%-%*/])=%s+(%S+)",       "%1 = %1 %2 %3")
-    b = b:gsub("λ","function")
-    b = b:gsub("function(%b())%s*=%s*$", "function%1")  -- optional `=` fence after args
-    b = b:gsub("%*%*","\1"); b = b:gsub("%^%s*","return "); b = b:gsub("\1","^")
-    b = b:gsub("%+%+","..")
-    b = b:gsub("!"," end ")
-    b = b:gsub("%f[%w]let%s","local ")
+    b = b:gsub("^(%s*)(%w+)%s*%?=%s*([^;]+)",  "%1if %2 == nil then %2 = %3 end")
+    b = b:gsub("(%w+)%s*([%+%-%*/])=%s+(%S+)", "%1 = %1 %2 %3")
+    b = b:gsub("@","function")                                -- @ = function
+    b = b:gsub("%$","local ")                                 -- $ = local
+    b = b:gsub("function(%b())%s*=%s*$", "function%1")        -- strip optional `=` after args
+    b = b:gsub("%*%*","^")                                    -- ** = exponent
+    b = b:gsub("%+%+","\1")                                   -- shield ++ for ..
+    b = b:gsub("%.%.%.","\4")                                 -- shield vararg
+    b = b:gsub("%.%.","\5")                                   -- shield literal ..
+    b = b:gsub("%.(%s)"," end %1")                            -- . + space  -> end
+    b = b:gsub("%.$"," end ")                                 -- . at EOL   -> end
+    b = b:gsub("\5","..")
+    b = b:gsub("\4","...")
+    b = b:gsub("\1","..")                                     -- ++ -> ..
+    b = b:gsub("!","return ")                                 -- ! = return
     local function brkt(kw, close)
       b = b:gsub("(%f[%w]"..kw.."%s*%b())(%s+)(%w+)", function(p,g,w)
         if w == close then return nil end
@@ -53,9 +61,15 @@ return function(file)
     return b .. cmt
   end
 
-  local lua = io.open(file):read"*a":gsub("^#!","--")
+  local raw = io.open(file):read"*a":gsub("^#!","--")
                                     :gsub("([^\n]*)\\\n([^\n]*)\n", "%1 %2\n\n")
-                                    :gsub("[^\n]+", line)
+  local longs = {}
+  raw = raw:gsub("%[%[.-%]%]", function(m)
+    longs[#longs+1] = m
+    return "\2"..#longs.."\2"
+  end)
+  local lua = raw:gsub("[^\n]+", line)
+                 :gsub("\2(%d+)\2", function(n) return longs[tonumber(n)] end)
   local fn, err = load(lua, file)
   if not fn then
     local n = tonumber((err or ""):match":(%d+):")

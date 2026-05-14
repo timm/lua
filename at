@@ -1,0 +1,7 @@
+#!/usr/bin/env lua
+-- at runner: transpile + run a .at file. forwards extra args.
+package.path = (debug.getinfo(1).source:match"@?(.*/)" or "./").."?.lua;"..package.path
+local at = require"at"
+local file = table.remove(arg, 1) or error("usage: at <file.at> [args...]")
+arg[0] = file
+at(file)
