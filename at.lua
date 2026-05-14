@@ -1,8 +1,7 @@
 -- at.lua : ".at" -> Lua transpiler.
--- @ = function   $ = local   ! = return   . = end (followed by space/EOL)
+-- @ = function   $ = local   ! = return
 -- ** = exponent  ++ = concat
--- Bracketed conditions: `if (cond) body .`, `elseif (cond) body .`,
--- `while (cond) body .`. Transpiler inserts `then`/`do` after the brackets.
+-- `end`/`then`/`do` written literally.
 -- `\` at line end joins next line (with blank-pad to preserve line numbers).
 local loaded = {}
 
@@ -36,25 +35,8 @@ return function(file)
     b = b:gsub("%$","local ")                                 -- $ = local
     b = b:gsub("function(%b())%s*=%s*$", "function%1")        -- strip optional `=` after args
     b = b:gsub("%*%*","^")                                    -- ** = exponent
-    b = b:gsub("%+%+","\1")                                   -- shield ++ for ..
-    b = b:gsub("%.%.%.","\4")                                 -- shield vararg
-    b = b:gsub("%.%.","\5")                                   -- shield literal ..
-    b = b:gsub("%.(%s)"," end %1")                            -- . + space  -> end
-    b = b:gsub("%.$"," end ")                                 -- . at EOL   -> end
-    b = b:gsub("\5","..")
-    b = b:gsub("\4","...")
-    b = b:gsub("\1","..")                                     -- ++ -> ..
+    b = b:gsub("%+%+","..")                                   -- ++ = concat
     b = b:gsub("!","return ")                                 -- ! = return
-    local function brkt(kw, close)
-      b = b:gsub("(%f[%w]"..kw.."%s*%b())(%s+)(%w+)", function(p,g,w)
-        if w == close then return nil end
-        return p.." "..close..g..w
-      end)
-      b = b:gsub("(%f[%w]"..kw.."%s*%b())%s*$", "%1 "..close)
-    end
-    brkt("if",     "then")
-    brkt("elseif", "then")
-    brkt("while",  "do")
     b = b:gsub("%[(.-) for (.-) in (.-) if (.-)%]", comp)
     b = b:gsub("%[(.-) for (.-) in (.-)%]", comp)
     b = b:gsub("\3(%d+)\3", function(n) return strs[tonumber(n)] end)

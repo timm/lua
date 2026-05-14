@@ -142,8 +142,9 @@ function NUM.norm(i,v,    z)
 
 -- Minkowski distance to ideal goal.
 function DATA.disty(i,row,    fn)
-  fn = function(col) return abs(col:norm(row[col.at]) - col.heaven)^the.p end
-  return (l.sum(i.cols.y,fn) / #i.cols.y) ^ (1/the.p) end
+  s=0; for col in i.cols.y do 
+    s=s+ abs(col:norm(row[col.at]) - col.heaven)^the.p end
+  return (s / #i.cols.y) ^ (1/the.p) end
 
 -- Probability of winning against the median row.
 function wins(data,    ys,lo,n_mid)
