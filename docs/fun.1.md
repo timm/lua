@@ -110,8 +110,10 @@ z *= 3       -- etc.
 w /= 4
 ```
 
-Operators: `+= -= *= /=`. **LHS must be a single word** (`%w+`) and
-**RHS must be one whitespace-separated token** (`%S+`).
+Operators: `+= -= *= /=`. **LHS may be a dotted name**
+(`[%w_%.]+` — so `obj.field += 1` works) and **RHS must be one
+whitespace-separated token** (`%S+`). Bracket-indexed LHS like
+`t[i] += 1` does **not** transform.
 
 ## Line continuation
 
@@ -192,12 +194,12 @@ balanced-paren expression on the same line. Multi-line conditions
 need `\`:
 
 ```fun
--- ✗ broken — closing paren on next physical line
+-- BAD: broken — closing paren on next physical line
 if (very_long_condition_part1 and
     very_long_condition_part2)
   ...
 
--- ✓ join with backslash
+-- OK: join with backslash
 if (very_long_condition_part1 and \
     very_long_condition_part2)
   ...
@@ -206,20 +208,19 @@ if (very_long_condition_part1 and \
 ## List comprehensions — one line
 
 `[expr for var in iter]` (and the `if`-guarded form) must fit on one
-line. The regex stops at the first matching `]`.
+line. The transpiler uses Lua's balanced-bracket matcher (`%b[]`) so
+nested `[...]` inside the expression, iterator, or guard is fine
+(e.g. `[r[i.at] for r in rows if r[i.at] ~= "?"]` works), but the
+opening `[` and matching `]` must be on the **same physical line**.
 
 ```fun
--- ✗ broken — comprehension spans lines
+-- BAD: broken — comprehension spans lines
 let xs = [transform(x)
           for x in source]
 
--- ✓ join with backslash
+-- OK: join with backslash
 let xs = [transform(x) \
           for x in source]
-
--- ✓ or extract the iterator first
-let it = source
-let xs = [transform(x) for x in it]
 ```
 
 ## `?=` — one line, statement-leading
@@ -240,24 +241,43 @@ line.
 Workaround: write the expansion by hand or wrap RHS in parens with no
 internal whitespace — `x += (a+b)` works because `(a+b)` is one token.
 
-## Comprehension iterator with `]` inside
-
-The regex stops at the **first** `]`. If `iter` contains a literal
-`]` (e.g. inside a Lua character class), the regex closes early:
-
-```fun
--- ✗ broken — `]` inside "[^,]+" closes the comprehension
-let t = [l.thing(x) for x in s:gmatch"[^,]+"]
-```
-
-Workaround: bind the iterator first.
-
-```fun
-let it = s:gmatch"[^,]+"
-let t  = [l.thing(x) for x in it]
-```
-
 # OTHER QUIRKS
+
+## Lua statement-call ambiguity (`[` or `(` after a function call)
+
+Lua grammar treats `f()[k]` as "call `f`, then index its return
+value at `[k]`" — even when the `[` is on the next line. Newlines
+are not statement terminators in Lua. So a comprehension or
+parenthesized expression on the line **after** a function call gets
+glued to that call:
+
+```fun
+-- BAD: broken — Lua parses as `print(...)[print(...) for k in fails]`
+print(l.fmt("done"))
+[print("FAIL "..k) for k in fails]
+```
+
+Lua tries to index `print`'s return value (nil) and errors with
+`attempt to index a nil value`. The same trap fires when a
+following line starts with `(`:
+
+```fun
+-- BAD: broken — Lua parses as `f()(g)()`
+let x = f()
+(g)()
+```
+
+Workaround: terminate the prior statement with `;`.
+
+```fun
+-- OK:
+print(l.fmt("done"));
+[print("FAIL "..k) for k in fails]
+```
+
+This is a Lua quirk, not a *fun* quirk — the transpiler emits Lua
+exactly as written. Idiomatic rule: prepend `;` whenever a line
+starts with `(` or `[` after a function call.
 
 ## `!` substitutes everywhere outside strings/comments
 

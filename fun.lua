@@ -17,6 +17,28 @@ local function comp(e,v,i,c)
          :format(v, i, guard, e, close)
 end
 
+-- Parse a balanced [...] as a comprehension; return nil if not a comp.
+local function tryComp(s)
+  local body = s:sub(2, -2)
+  local fp = body:find(" for ")
+  if not fp then return s end
+  local e    = body:sub(1, fp - 1)
+  local rest = body:sub(fp + 5)
+  local ip = rest:find(" in ")
+  if not ip then return s end
+  local v     = rest:sub(1, ip - 1)
+  local rest2 = rest:sub(ip + 4)
+  local cp = rest2:find(" if ")
+  local i, c
+  if cp then
+    i = rest2:sub(1, cp - 1)
+    c = rest2:sub(cp + 4)
+  else
+    i = rest2
+  end
+  return comp(e, v, i, c)
+end
+
 local function line(b)
   if b:match"^%s*%-%-" or b:match"^%s*$" then return b end
   local strs, cmt = {}, ""
@@ -26,15 +48,14 @@ local function line(b)
        :gsub("'[^']*'",    hide)
        :gsub("(%s*%-%-.*)$", function(c) cmt = c; return "" end)
        :gsub("^(%s*)(%w+)%s*%?=%s*([^;]+)",  "%1if %2 == nil then %2 = %3 end")
-       :gsub("(%w+)%s*([%+%-%*/])=%s+(%S+)", "%1 = %1 %2 %3")
+       :gsub("([%w_%.]+)%s*([%+%-%*/])=%s+(%S+)", "%1 = %1 %2 %3")
        :gsub("%f[%w_]fun%f[%W]",       "function")
        :gsub("%f[%w_]let%f[%W]",       "local")
        :gsub("%f[%w_]if(%s*%b())",     "if%1 then")
        :gsub("%f[%w_]elseif(%s*%b())", "elseif%1 then")
        :gsub("function(%b())%s*=%s*$", "function%1")
        :gsub("!",         "return ")
-       :gsub("%[(.-) for (.-) in (.-) if (.-)%]", comp)
-       :gsub("%[(.-) for (.-) in (.-)%]",         comp)
+       :gsub("(%b[])", tryComp)
        :gsub("\3(%d+)\3", function(n) return strs[tonumber(n)] end)
   return b .. cmt
 end

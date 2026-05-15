@@ -1,4 +1,6 @@
 \documentclass[10pt,twocolumn]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
 \usepackage{listings}
 \usepackage{xcolor}
 \usepackage[margin=1cm]{geometry}
@@ -143,9 +145,12 @@ z *= 3       -- etc.
 w /= 4
 \end{lstlisting}
 
-Operators: \passthrough{\lstinline!+= -= *= /=!}. \textbf{LHS must be a
-single word} (\passthrough{\lstinline!\%w+!}) and \textbf{RHS must be
+Operators: \passthrough{\lstinline!+= -= *= /=!}. \textbf{LHS may be a
+dotted name} (\passthrough{\lstinline![\%w\_\%.]+!} --- so
+\passthrough{\lstinline!obj.field += 1!} works) and \textbf{RHS must be
 one whitespace-separated token} (\passthrough{\lstinline!\%S+!}).
+Bracket-indexed LHS like \passthrough{\lstinline!t[i] += 1!} does
+\textbf{not} transform.
 
 \subsection{Line continuation}\label{line-continuation}
 
@@ -270,12 +275,12 @@ expression on the same line. Multi-line conditions need
 \passthrough{\lstinline!\\!}:
 
 \begin{lstlisting}[language=Fun]
--- ✗ broken — closing paren on next physical line
+-- BAD: broken — closing paren on next physical line
 if (very_long_condition_part1 and
     very_long_condition_part2)
   ...
 
--- ✓ join with backslash
+-- OK: join with backslash
 if (very_long_condition_part1 and \
     very_long_condition_part2)
   ...
@@ -286,20 +291,22 @@ line}\label{list-comprehensions-one-line}
 
 \passthrough{\lstinline![expr for var in iter]!} (and the
 \passthrough{\lstinline!if!}-guarded form) must fit on one line. The
-regex stops at the first matching \passthrough{\lstinline!]!}.
+transpiler uses Lua's balanced-bracket matcher
+(\passthrough{\lstinline!\%b[]!}) so nested
+\passthrough{\lstinline![...]!} inside the expression, iterator, or
+guard is fine
+(e.g.~\passthrough{\lstinline![r[i.at] for r in rows if r[i.at] \~= "?"]!}
+works), but the opening \passthrough{\lstinline![!} and matching
+\passthrough{\lstinline!]!} must be on the \textbf{same physical line}.
 
 \begin{lstlisting}[language=Fun]
--- ✗ broken — comprehension spans lines
+-- BAD: broken — comprehension spans lines
 let xs = [transform(x)
           for x in source]
 
--- ✓ join with backslash
+-- OK: join with backslash
 let xs = [transform(x) \
           for x in source]
-
--- ✓ or extract the iterator first
-let it = source
-let xs = [transform(x) for x in it]
 \end{lstlisting}
 
 \subsection{\texorpdfstring{\texttt{?=} --- one line,
@@ -332,27 +339,50 @@ Workaround: write the expansion by hand or wrap RHS in parens with no
 internal whitespace --- \passthrough{\lstinline!x += (a+b)!} works
 because \passthrough{\lstinline!(a+b)!} is one token.
 
-\subsection{\texorpdfstring{Comprehension iterator with \texttt{{]}}
-inside}{Comprehension iterator with {]} inside}}\label{comprehension-iterator-with-inside}
-
-The regex stops at the \textbf{first} \passthrough{\lstinline!]!}. If
-\passthrough{\lstinline!iter!} contains a literal
-\passthrough{\lstinline!]!} (e.g.~inside a Lua character class), the
-regex closes early:
-
-\begin{lstlisting}[language=Fun]
--- ✗ broken — `]` inside "[^,]+" closes the comprehension
-let t = [l.thing(x) for x in s:gmatch"[^,]+"]
-\end{lstlisting}
-
-Workaround: bind the iterator first.
-
-\begin{lstlisting}[language=Fun]
-let it = s:gmatch"[^,]+"
-let t  = [l.thing(x) for x in it]
-\end{lstlisting}
-
 \section{OTHER QUIRKS}\label{other-quirks}
+
+\subsection{\texorpdfstring{Lua statement-call ambiguity (\texttt{{[}}
+or \texttt{(} after a function
+call)}{Lua statement-call ambiguity ({[} or ( after a function call)}}\label{lua-statement-call-ambiguity-or-after-a-function-call}
+
+Lua grammar treats \passthrough{\lstinline!f()[k]!} as ``call
+\passthrough{\lstinline!f!}, then index its return value at
+\passthrough{\lstinline![k]!}'' --- even when the
+\passthrough{\lstinline![!} is on the next line. Newlines are not
+statement terminators in Lua. So a comprehension or parenthesized
+expression on the line \textbf{after} a function call gets glued to that
+call:
+
+\begin{lstlisting}[language=Fun]
+-- BAD: broken — Lua parses as `print(...)[print(...) for k in fails]`
+print(l.fmt("done"))
+[print("FAIL "..k) for k in fails]
+\end{lstlisting}
+
+Lua tries to index \passthrough{\lstinline!print!}'s return value (nil)
+and errors with \passthrough{\lstinline!attempt to index a nil value!}.
+The same trap fires when a following line starts with
+\passthrough{\lstinline!(!}:
+
+\begin{lstlisting}[language=Fun]
+-- BAD: broken — Lua parses as `f()(g)()`
+let x = f()
+(g)()
+\end{lstlisting}
+
+Workaround: terminate the prior statement with
+\passthrough{\lstinline!;!}.
+
+\begin{lstlisting}[language=Fun]
+-- OK:
+print(l.fmt("done"));
+[print("FAIL "..k) for k in fails]
+\end{lstlisting}
+
+This is a Lua quirk, not a \emph{fun} quirk --- the transpiler emits Lua
+exactly as written. Idiomatic rule: prepend \passthrough{\lstinline!;!}
+whenever a line starts with \passthrough{\lstinline!(!} or
+\passthrough{\lstinline![!} after a function call.
 
 \subsection{\texorpdfstring{\texttt{!} substitutes everywhere outside
 strings/comments}{! substitutes everywhere outside strings/comments}}\label{substitutes-everywhere-outside-stringscomments}

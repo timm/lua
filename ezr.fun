@@ -7,6 +7,7 @@ ezr.fun : explainable multi-objective optimization
   -C Check=5       final check budget
   -c cliffs=0.195  Cliff's delta threshold
   -e eps=0.35      Cohen's threshold
+  -f file=auto93.csv  data file
   -k ksconf=1.36   KS test threshold
   -l leaf=3        min rows per tree leaf
   -p p=2           distance coefficient
@@ -96,16 +97,17 @@ add= fun(i,v,w)
 
 -- NUM update: incremental mean/variance.
 NUM._add= fun(i,v,w)
-  i.n= i.n + w
+  i.n += w
   if (w < 0 and i.n <= 1)
     i.n, i.mu, i.m2= 0, 0, 0
   else
     let err= v - i.mu
-    i.mu= i.mu + w * err / i.n
-    i.m2= i.m2 + w * err * (v - i.mu) end end
+    i.mu += (w * err / i.n)
+    i.m2 += (w * err * (v - i.mu)) end end
 
 -- SYM update: counts.
 SYM._add= fun(i,v,w)
+  i.n += w
   i.has[v]= w + (i.has[v] or 0) end
 
 -- COLS update: each col with row[col.at].
@@ -155,7 +157,7 @@ NUM.spread= fun(i)
 SYM.spread= fun(i)
   let n= 0
   for _,v in pairs(i.has) do
-    n= n - v/i.n * log(v/i.n,2) end
+    n -= (v/i.n * log(v/i.n,2)) end
   !n end
 
 -- Sigmoid normalization.
@@ -187,7 +189,7 @@ wins= fun(data)
 -- Build variance-minimizing tree.
 TREE.build= fun(i,data,rows)
   let mid= data:clone(rows):mid()
-  i.y= adds(l.map(rows, fun(r) !i.score(r) end))
+  i.y= adds([i.score(r) for r in rows])
   i.mids= l.kv(data.cols.y,
                fun(c) !c.txt end,
                fun(c) !mid[c.at] end)
@@ -237,7 +239,7 @@ TREE.nodes= fun(i,fn,lvl,pre)
 TREE.show= fun(i)
   let cb= fun(node,lvl,pre)
            let p= lvl > 0
-                  and ("|   "):rep(lvl-1)..pre or ""
+                  and ("|  "):rep(lvl-1)..pre or ""
            let row= l.fmt(
              "%-"..the.Show.."s ,%5.2f ,(%3d),  %s\n",
              p, l.o(node.y:mid()),
@@ -259,10 +261,7 @@ split= fun(col,rows,fn,cut,test)
 
 -- Numeric splits on median.
 NUM.splits= fun(i,rows,fn)
-  let vs= {}
-  for _,r in ipairs(rows) do
-    if (r[i.at] ~= "?") l.push(vs, r[i.at]) end
-    end
+  let vs= [r[i.at] for r in rows if r[i.at] ~= "?"]
   if (#vs < 2) !{} end
   l.sort(vs)
   let mu= vs[#vs // 2 + 1]
@@ -288,8 +287,8 @@ let cliffsDelta= fun(xs,ys)
   let n, m= #xs, #ys
   let ngt, nlt= 0, 0
   for _,v in ipairs(xs) do
-    ngt= ngt + l.bisect(ys, v)
-    nlt= nlt + (m - l.bisect(ys, v + 1e-32)) end
+    ngt += l.bisect(ys, v)
+    nlt += (m - l.bisect(ys, v + 1e-32)) end
   !abs(ngt - nlt) / (n * m) end
 
 -- Kolmogorov-Smirnov: max CDF gap between xs and ys.
@@ -316,21 +315,21 @@ same= fun(xs,ys,eps)
 
 -- Group results into top-tier ranks.
 let bestRanks= fun(dict)
-  let out, names= {}, {}
-  for k in pairs(dict) do l.push(names, k) end
+  let out= {}
+  let names= [k for k,_ in dict]
   let cmp= fun(a,b)
             !adds(dict[a]):mid()
                < adds(dict[b]):mid() end
   l.sort(names, cmp)
-  let eps= adds(dict[names[1]]):spread() * the.eps
-  let rows= dict[names[1]]
-  out[names[1]]= adds(rows, Num(names[1]))
+  let best= dict[names[1]]
+  let eps= adds(best):spread() * the.eps
+  out[names[1]]= adds(best, Num(names[1]))
   for n= 2, #names do
-    if (same(rows, dict[names[n]], eps))
-      out[names[n]]= adds(rows, Num(names[n]))
+    if (same(best, dict[names[n]], eps))
+      out[names[n]]= adds(dict[names[n]], Num(names[n]))
     else
       break end end
-  !out end 
+  !out end
 
 -- ## Library
 -- Set metatable index for polymorphism.
@@ -359,7 +358,7 @@ l.map= fun(t,f) ![f(x) for x in t] end
 -- Sum f(x) over table.
 l.sum= fun(t,f)
   let n= 0
-  for _,x in ipairs(t) do n= n + f(x) end
+  for _,x in ipairs(t) do n += f(x) end
   !n end
 
 -- Build dict by applying key/value transforms.
@@ -437,25 +436,68 @@ l.weibull= fun(k,lambda)
 -- ## Examples
 let eg= {}
 
-eg["-h"]   = fun(_) print(help) end
-eg["--the"]= fun(_) print(l.o(the)) end
+eg["-h"]   = fun() print(help); !#help > 0 end
+eg["--the"]= fun()
+  print(l.o(the)); !the.file ~= nil end
 
-eg["--all"]= fun(arg)
-  let ss= {}
-  for k in pairs(eg) do
-    if (k ~= "--all") l.push(ss, k) end end
+-- Run every eg fn, track failures, list them, exit nonzero on fail.
+eg["--all"]= fun()
+  let fails= {}
+  let ss= [k for k,_ in eg if k ~= "--all"]
   for _,k in ipairs(l.sort(ss)) do
     print("\n"..k)
     randomseed(the.seed)
-    eg[k](arg) end end
+    let ok, res= pcall(eg[k])
+    if (not ok or res == false)
+      l.push(fails, k) end end
+  print(l.fmt("\n# pass=%d fail=%d",
+              #ss - #fails, #fails));
+  [print("  FAIL "..k) for k in fails]
+  if (#fails > 0) os.exit(1) end end
 
-eg["--csv"]= fun(f)
+eg["--csv"]= fun()
   let n= 0
-  for r in l.csv(f) do
+  for r in l.csv(the.file) do
     if (n % 30 == 0) print(l.o(r)) end
-    n= n + 1 end end
+    n += 1 end
+  !n > 100 end
 
-eg["--ranks"]= fun(_)
+eg["--num"]= fun()
+  let n= Num()
+  for x= 1, 1000 do add(n, x) end
+  print(l.fmt("num mu=%.4f sd=%.4f",
+              n.mu, n:spread()))
+  !abs(n.mu - 500.5) < 1e-6
+   and abs(n:spread() - 288.8194) < 0.01
+   and n.n == 1000 end
+
+eg["--sym"]= fun()
+  let s= adds({"a","a","b","b","b"}, Sym())
+  print("sym mode="..s:mid().." n="..s.n
+        .." entropy="..l.o(s:spread()))
+  !s:mid() == "b" and s.n == 5
+   and s:spread() > 0 end
+
+eg["--bisect"]= fun()
+  let t= {10, 20, 30}
+  let r= [l.bisect(t,x) for x in {5, 10, 25, 30, 100}]
+  print("bisect", l.o(r))
+  !r[1] == 0 and r[2] == 1 and r[3] == 2
+   and r[4] == 3 and r[5] == 3 end
+
+eg["--same"]= fun()
+  let xs, ys, zs= {}, {}, {}
+  for i= 1, 100 do
+    l.push(xs, l.weibull(2, 10))
+    l.push(ys, l.weibull(2, 10))
+    l.push(zs, l.weibull(2, 30)) end
+  let xy= same(xs, ys, the.eps)
+  let xz= same(xs, zs, the.eps)
+  print("same xy="..tostring(xy)
+        .." xz="..tostring(xz))
+  !xy and not xz end
+
+eg["--ranks"]= fun()
   let dict= {}
   for n= 1, 20 do
     let name= "t"..n
@@ -466,27 +508,46 @@ eg["--ranks"]= fun(_)
       l.push(dict[name], l.weibull(k, lambda))
       end end
   print("\nTop Tier Treatments:")
-  let u= l.sort(l.t2d(bestRanks(dict)), l.lt"mu")
+  let top= bestRanks(dict)
+  let u= l.sort(l.t2d(top), l.lt"mu")
   for _,num in ipairs(u) do
     print(l.fmt("%-5s median: %5.2f",
-                num.txt, num:mid())) end end
+                num.txt, num:mid())) end
+  let lows= [k for k,_ in top if tonumber(k:sub(2)) <= 5]
+  !#lows >= 3 end
 
-eg["--data"]= fun(f)
-  let d= Data(f)
+eg["--data"]= fun()
+  let d= Data(the.file)
+  let bad= [r for r in d.rows if #r ~= #d.cols.all]
+  let ok= #d.cols.y > 0 and #bad == 0
   for _,c in ipairs(d.cols.y) do
-    print(c.txt, l.o(c:mid())) end end
+    print(c.txt, l.o(c:mid()))
+    if (type(c:mid()) ~= "number") ok= false end end
+  print("rows="..#d.rows.." cols="..#d.cols.all
+        .." bad="..#bad)
+  !ok end
 
-eg["--tree"]= fun(f)
-  let d = Data(f)
+eg["--clone"]= fun()
+  let d= Data(the.file)
+  let c= d:clone(l.slice(d.rows, 1, 10))
+  print("clone rows="..#c.rows
+        .." cols="..#c.cols.all)
+  !#c.rows == 10
+   and #c.cols.all == #d.cols.all
+   and #c.cols.y == #d.cols.y end
+
+eg["--tree"]= fun()
+  let d = Data(the.file)
   let rs= l.many(d.rows, the.Budget)
   d= d:clone(rs)
   let t= Tree(fun(r) !d:disty(r) end)
-  t:build(d, d.rows):show() end
+  t:build(d, d.rows):show()
+  !t.y and t.y.n > 0 end
 
-eg["--test"]= fun(src)
-  let data= Data(src)
+eg["--test"]= fun()
+  let data= Data(the.file)
+  if (not data.cols) !false end
   let stats= Num("win")
-  if (not data.cols) return end
   let fn_win= wins(data)
   for _= 1, 20 do
     l.shuffle(data.rows)
@@ -506,29 +567,30 @@ eg["--test"]= fun(src)
     let top= l.sort(l.slice(test, 1, the.Check),
                     f_dist2)
     add(stats, fn_win(top[1])) end
-  print(l.o(floor(stats:mid()))) end
+  let m= floor(stats:mid())
+  print(l.o(m))
+  !m >= 0 and m <= 100 end
 
 -- ## Main
 -- Fill `the` from help string defaults.
 for k,v in help:gmatch("([%w_]+)%s*=%s*([^%s]+)") do
   the[k]= l.thing(v) end
 
--- CLI: invoke eg[...] or override the[...].
+-- CLI: override the[...] flags first, then invoke eg[...].
 let main= fun()
   let n= 1
   while n <= #arg do
     let k= arg[n]
     let v= arg[n+1]
-    n= n + 1
     if (eg[k])
       randomseed(the.seed)
-      eg[k](v and l.thing(v) or nil)
-      if (v and not eg[v]) n= n + 1 end
+      eg[k]()
+      n += 1
     else
       for k1 in pairs(the) do
         if (k == "-"..k1:sub(1,1))
-          the[k1]= l.thing(v)
-          n= n + 1 end end end end end
+          the[k1]= l.thing(v) end end
+      n += 2 end end end
 
 -- Maybe call main.
 if ((arg[0] or ""):match"ezr%.fun") main() end

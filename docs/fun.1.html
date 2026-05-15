@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<html xmlns="http://www.w3.org/1999/xhtml">
 <head>
   <meta charset="utf-8" />
   <meta name="generator" content="pandoc" />
@@ -264,7 +264,7 @@ class="sourceCode bash"><code class="sourceCode bash"><span id="cb1-1"><a href="
 
 let greet, sq
 
-greet = fun(name) ! &quot;hello, &quot;++name end
+greet = fun(name) ! &quot;hello, &quot;..name end
 sq    = fun(x)    ! x*x end
 
 print(greet(&quot;world&quot;))
@@ -295,17 +295,12 @@ print(sq(5))</code></pre>
 <td><code>return</code></td>
 <td>sigil; emits <code>return</code> + RHS</td>
 </tr>
-<tr>
-<td><code>++</code></td>
-<td><code>..</code></td>
-<td>string concat</td>
-</tr>
 </tbody>
 </table>
 <p>Substitutions are line-level. Strings (<code>"..."</code>,
 <code>'...'</code>, <code>[[...]]</code>) and trailing <code>--</code>
 comments are hidden before substitution and restored after, so
-<code>"!"</code>, <code>"++"</code>, etc. survive unchanged.</p>
+<code>"!"</code> and other token-like contents survive unchanged.</p>
 <h2 id="control-flow">Control flow</h2>
 <p><code>if</code> and <code>elseif</code> <strong>require
 parentheses</strong> around the condition; the transpiler injects
@@ -340,9 +335,11 @@ parses).</p>
 y -= 2       -- y = y - 2
 z *= 3       -- etc.
 w /= 4</code></pre>
-<p>Operators: <code>+= -= *= /=</code>. <strong>LHS must be a single
-word</strong> (<code>%w+</code>) and <strong>RHS must be one
-whitespace-separated token</strong> (<code>%S+</code>).</p>
+<p>Operators: <code>+= -= *= /=</code>. <strong>LHS may be a dotted
+name</strong> (<code>[%w_%.]+</code> — so <code>obj.field += 1</code>
+works) and <strong>RHS must be one whitespace-separated token</strong>
+(<code>%S+</code>). Bracket-indexed LHS like <code>t[i] += 1</code> does
+<strong>not</strong> transform.</p>
 <h2 id="line-continuation">Line continuation</h2>
 <p>A trailing <code>\</code> joins the next line; the joined-from
 physical line is replaced with a blank to <strong>preserve line
@@ -355,8 +352,9 @@ constraints</em> below.</p>
 <h2 id="comprehensions">Comprehensions</h2>
 <pre class="fun"><code>let squares = [x*x for x in xs]
 let evens   = [x   for x in xs if x % 2 == 0]</code></pre>
-<p>Compiles to an inline IIFE. If <code>iter</code> contains no
-<code>(</code>, the transpiler wraps:</p>
+<p>Compiles to an inline IIFE (immediately invoked function expression).
+If <code>iter</code> contains no <code>(</code>, the transpiler
+wraps:</p>
 <ul>
 <li>single loop var → <code>for _,v in ipairs(iter)</code></li>
 <li>comma in loop var → <code>for k,v in pairs(iter)</code></li>
@@ -415,31 +413,31 @@ on one line. Workaround: use <code>\</code> continuation.</p>
 <p>The injection regex matches <code>if</code> (or <code>elseif</code>)
 followed by a balanced-paren expression on the same line. Multi-line
 conditions need <code>\</code>:</p>
-<pre class="fun"><code>-- ✗ broken — closing paren on next physical line
+<pre class="fun"><code>-- BAD: broken — closing paren on next physical line
 if (very_long_condition_part1 and
     very_long_condition_part2)
   ...
 
--- ✓ join with backslash
+-- OK: join with backslash
 if (very_long_condition_part1 and \
     very_long_condition_part2)
   ...</code></pre>
 <h2 id="list-comprehensions-one-line">List comprehensions — one
 line</h2>
 <p><code>[expr for var in iter]</code> (and the <code>if</code>-guarded
-form) must fit on one line. The regex stops at the first matching
-<code>]</code>.</p>
-<pre class="fun"><code>-- ✗ broken — comprehension spans lines
+form) must fit on one line. The transpiler uses Lua’s balanced-bracket
+matcher (<code>%b[]</code>) so nested <code>[...]</code> inside the
+expression, iterator, or guard is fine
+(e.g. <code>[r[i.at] for r in rows if r[i.at] ~= "?"]</code> works), but
+the opening <code>[</code> and matching <code>]</code> must be on the
+<strong>same physical line</strong>.</p>
+<pre class="fun"><code>-- BAD: broken — comprehension spans lines
 let xs = [transform(x)
           for x in source]
 
--- ✓ join with backslash
+-- OK: join with backslash
 let xs = [transform(x) \
-          for x in source]
-
--- ✓ or extract the iterator first
-let it = source
-let xs = [transform(x) for x in it]</code></pre>
+          for x in source]</code></pre>
 <h2 id="one-line-statement-leading"><code>?=</code> — one line,
 statement-leading</h2>
 <p>Pattern: <code>^(%s*)(%w+)%s*?=%s*([^;]+)</code>. Indented allowed;
@@ -461,17 +459,33 @@ indexing</strong>. <code>obj.field += 1</code> and
 <p>Workaround: write the expansion by hand or wrap RHS in parens with no
 internal whitespace — <code>x += (a+b)</code> works because
 <code>(a+b)</code> is one token.</p>
-<h2 id="comprehension-iterator-with-inside">Comprehension iterator with
-<code>]</code> inside</h2>
-<p>The regex stops at the <strong>first</strong> <code>]</code>. If
-<code>iter</code> contains a literal <code>]</code> (e.g. inside a Lua
-character class), the regex closes early:</p>
-<pre class="fun"><code>-- ✗ broken — `]` inside &quot;[^,]+&quot; closes the comprehension
-let t = [l.thing(x) for x in s:gmatch&quot;[^,]+&quot;]</code></pre>
-<p>Workaround: bind the iterator first.</p>
-<pre class="fun"><code>let it = s:gmatch&quot;[^,]+&quot;
-let t  = [l.thing(x) for x in it]</code></pre>
 <h1 id="other-quirks">OTHER QUIRKS</h1>
+<h2 id="lua-statement-call-ambiguity-or-after-a-function-call">Lua
+statement-call ambiguity (<code>[</code> or <code>(</code> after a
+function call)</h2>
+<p>Lua grammar treats <code>f()[k]</code> as “call <code>f</code>, then
+index its return value at <code>[k]</code>” — even when the
+<code>[</code> is on the next line. Newlines are not statement
+terminators in Lua. So a comprehension or parenthesized expression on
+the line <strong>after</strong> a function call gets glued to that
+call:</p>
+<pre class="fun"><code>-- BAD: broken — Lua parses as `print(...)[print(...) for k in fails]`
+print(l.fmt(&quot;done&quot;))
+[print(&quot;FAIL &quot;..k) for k in fails]</code></pre>
+<p>Lua tries to index <code>print</code>’s return value (nil) and errors
+with <code>attempt to index a nil value</code>. The same trap fires when
+a following line starts with <code>(</code>:</p>
+<pre class="fun"><code>-- BAD: broken — Lua parses as `f()(g)()`
+let x = f()
+(g)()</code></pre>
+<p>Workaround: terminate the prior statement with <code>;</code>.</p>
+<pre class="fun"><code>-- OK:
+print(l.fmt(&quot;done&quot;));
+[print(&quot;FAIL &quot;..k) for k in fails]</code></pre>
+<p>This is a Lua quirk, not a <em>fun</em> quirk — the transpiler emits
+Lua exactly as written. Idiomatic rule: prepend <code>;</code> whenever
+a line starts with <code>(</code> or <code>[</code> after a function
+call.</p>
 <h2 id="substitutes-everywhere-outside-stringscomments"><code>!</code>
 substitutes everywhere outside strings/comments</h2>
 <p><code>!</code> is a literal global substitution to
@@ -485,11 +499,6 @@ write <code>not x</code>.</li>
 <li><code>if (x != y)</code> is <strong>wrong</strong>; write
 <code>if (x ~= y)</code>.</li>
 </ul>
-<h2 id="substitutes-everywhere"><code>++</code> substitutes
-everywhere</h2>
-<p><code>++</code> is a literal global substitution to <code>..</code>.
-There is no increment operator. <code>i++</code> becomes
-<code>i..</code> (broken). Use <code>i += 1</code>.</p>
 <h2 id="fun-and-let-use-word-boundaries"><code>fun</code> and
 <code>let</code> use word boundaries</h2>
 <p>Frontier patterns <code>%f[%w_]fun%f[%W]</code> and
@@ -509,7 +518,7 @@ does not handle <code>\"</code>-escaped quotes</h2>
 escaped quotes break the hiding:</p>
 <pre class="fun"><code>let bad = &quot;she said \&quot;hi\&quot;&quot;    -- hiding misparses this</code></pre>
 <p>Workaround: use single quotes, <code>[[...]]</code>, or split into
-pieces with <code>++</code> (which becomes <code>..</code>).</p>
+pieces with Lua’s <code>..</code> concat.</p>
 <h2 id="method-dispatch-on-plain-tables">Method dispatch on plain
 tables</h2>
 <p>Plain Lua tables have no methods. <code>xs:remove(n)</code> is
@@ -521,7 +530,7 @@ looks for a <code>remove</code> field and errors. Use
 anywhere</h2>
 <p>Neither <code>"..."</code>, <code>'...'</code>, nor
 <code>[[...]]</code> interpolate <code>{var}</code>. Build strings with
-concatenation (<code>..</code> or <code>++</code>).</p>
+Lua’s <code>..</code> concat.</p>
 <h2 id="long-strings-span-multiple-lines-safely">Long strings span
 multiple lines safely</h2>
 <p><code>[[...]]</code> blocks are extracted from the whole source

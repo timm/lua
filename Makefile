@@ -85,6 +85,8 @@ docs/%.html : docs/%.md ## render markdown -> standalone html
 
 docs/%.tex : docs/%.md ## render markdown -> latex (uses fun listings)
 	@{ printf '\\documentclass[10pt,twocolumn]{article}\n'; \
+	   printf '\\usepackage[utf8]{inputenc}\n'; \
+	   printf '\\usepackage[T1]{fontenc}\n'; \
 	   printf '\\usepackage{listings}\n'; \
 	   printf '\\usepackage{xcolor}\n'; \
 	   printf '\\usepackage[margin=1cm]{geometry}\n'; \
