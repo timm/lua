@@ -1,0 +1,46 @@
+% etc/fun-listings.tex
+% Listings definition for the "fun" language.
+% Usage in Overleaf (or any LaTeX):
+%   \usepackage{listings}
+%   \usepackage{xcolor}
+%   \input{fun-listings}        % this file
+%   ...
+%   \begin{lstlisting}[language=Fun]
+%   let add = fun(x,y) ! x + y end
+%   \end{lstlisting}
+
+\definecolor{funKey}{rgb}{0.13,0.29,0.53}
+\definecolor{funStr}{rgb}{0.40,0.20,0.40}
+\definecolor{funCmt}{rgb}{0.56,0.35,0.01}
+\definecolor{funSig}{rgb}{0.70,0.20,0.30}
+\definecolor{funBuiltin}{rgb}{0.20,0.40,0.20}
+
+\lstdefinelanguage{Fun}{
+  morekeywords=[1]{fun,let,if,elseif,else,end,do,while,for,in,repeat,until,%
+                   break,return,then,and,or,not,true,false,nil},
+  morekeywords=[2]{ipairs,pairs,print,type,tostring,tonumber,setmetatable,%
+                   table,math,string,io,os},
+  sensitive=true,
+  morecomment=[l]{--},
+  morecomment=[s]{--[[}{]]},
+  morestring=[b]",
+  morestring=[b]',
+  morestring=[s]{[[}{]]},
+  literate=%
+    {!}{{{\textcolor{funSig}{\bfseries !}}}}1%
+    {++}{{{\textcolor{funSig}{\bfseries ++}}}}2%
+    {?=}{{{\textcolor{funSig}{?=}}}}2,
+  keywordstyle=[1]\color{funKey}\bfseries,
+  keywordstyle=[2]\color{funBuiltin},
+  commentstyle=\color{funCmt}\itshape,
+  stringstyle=\color{funStr},
+  basicstyle=\ttfamily\small,
+  showstringspaces=false,
+  breaklines=true,
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  numbersep=8pt,
+  frame=single,
+  framesep=4pt,
+  rulecolor=\color{gray!30}
+}

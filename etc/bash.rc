@@ -36,6 +36,14 @@ alias ..='cd ..'
 alias ...='cd ../..'
 alias please='sudo $(history -p \!\!)'
 
+# ---- bat (.fun syntax via repo config) -----------------------------------
+export BAT_CONFIG_DIR="$GIT_ROOT/etc/bat"
+if command -v bat >/dev/null 2>&1; then
+  # Rebuild cache from repo syntaxes on each shell open (cheap, idempotent).
+  bat cache --build --source="$BAT_CONFIG_DIR" >/dev/null 2>&1
+  alias funcat='bat -l Fun'
+fi
+
 # ---- functions -----------------------------------------------------------
 mkcd() { mkdir -p "$1" && cd "$1"; }
 b()    { cd $(printf '../%.0s' $(seq 1 ${1:-1})); }

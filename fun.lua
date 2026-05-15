@@ -1,6 +1,7 @@
--- at.lua : ".at" -> Lua transpiler.
--- @ = function   $ = local   ! = return   ++ = concat
--- `end`/`then`/`do` written literally.
+-- fun.lua : ".fun" -> Lua transpiler.
+-- fun = function   let = local   ! = return   ++ = concat
+-- `if (cond)` / `elseif (cond)` : paren required, `then` injected.
+-- `end`/`do` written literally.
 -- `\` at line end joins next line (blank-pad preserves line numbers).
 local loaded = {}
 
@@ -26,8 +27,10 @@ local function line(b)
        :gsub("(%s*%-%-.*)$", function(c) cmt = c; return "" end)
        :gsub("^(%s*)(%w+)%s*%?=%s*([^;]+)",  "%1if %2 == nil then %2 = %3 end")
        :gsub("(%w+)%s*([%+%-%*/])=%s+(%S+)", "%1 = %1 %2 %3")
-       :gsub("@",         "function")
-       :gsub("%$",        "local ")
+       :gsub("%f[%w_]fun%f[%W]",       "function")
+       :gsub("%f[%w_]let%f[%W]",       "local")
+       :gsub("%f[%w_]if(%s*%b())",     "if%1 then")
+       :gsub("%f[%w_]elseif(%s*%b())", "elseif%1 then")
        :gsub("function(%b())%s*=%s*$", "function%1")
        :gsub("%+%+",      "..")
        :gsub("!",         "return ")

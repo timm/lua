@@ -1,0 +1,106 @@
+%YAML 1.2
+---
+# Sublime-syntax for the `fun` language (Lua-ish with fun/let/!/++).
+name: Fun
+file_extensions:
+  - fun
+scope: source.fun
+
+contexts:
+  main:
+    - include: comments
+    - include: strings
+    - include: keywords
+    - include: operators
+    - include: numbers
+    - include: identifiers
+
+  comments:
+    - match: '--\[\['
+      scope: punctuation.definition.comment.fun
+      push: long_comment
+    - match: '--.*$'
+      scope: comment.line.double-dash.fun
+
+  long_comment:
+    - meta_scope: comment.block.fun
+    - match: '\]\]'
+      scope: punctuation.definition.comment.fun
+      pop: true
+
+  strings:
+    - match: '\[\['
+      scope: punctuation.definition.string.begin.fun
+      push: long_string
+    - match: '"'
+      scope: punctuation.definition.string.begin.fun
+      push: dq_string
+    - match: "'"
+      scope: punctuation.definition.string.begin.fun
+      push: sq_string
+
+  long_string:
+    - meta_scope: string.quoted.other.fun
+    - match: '\]\]'
+      scope: punctuation.definition.string.end.fun
+      pop: true
+
+  dq_string:
+    - meta_scope: string.quoted.double.fun
+    - match: '\\.'
+      scope: constant.character.escape.fun
+    - match: '"'
+      scope: punctuation.definition.string.end.fun
+      pop: true
+
+  sq_string:
+    - meta_scope: string.quoted.single.fun
+    - match: '\\.'
+      scope: constant.character.escape.fun
+    - match: "'"
+      scope: punctuation.definition.string.end.fun
+      pop: true
+
+  keywords:
+    - match: '\b(fun|let)\b'
+      scope: storage.type.fun
+    - match: '\b(if|elseif|else|end|do|while|for|in|repeat|until|break|return|then)\b'
+      scope: keyword.control.fun
+    - match: '\b(and|or|not)\b'
+      scope: keyword.operator.logical.fun
+    - match: '\b(true|false|nil)\b'
+      scope: constant.language.fun
+    - match: '\b(ipairs|pairs|print|type|tostring|tonumber|setmetatable|table|math|string|io|os)\b'
+      scope: support.function.builtin.fun
+
+  operators:
+    - match: '!'
+      scope: keyword.control.return.fun
+    - match: '\+\+'
+      scope: keyword.operator.concat.fun
+    - match: '\?='
+      scope: keyword.operator.condinit.fun
+    - match: '\+=|-=|\*=|/='
+      scope: keyword.operator.assignment.compound.fun
+    - match: '==|~=|<=|>=|<|>|='
+      scope: keyword.operator.comparison.fun
+    - match: '\+|-|\*|/|//|%|\^|#|\.\.'
+      scope: keyword.operator.arithmetic.fun
+
+  numbers:
+    - match: '\b0[xX][0-9a-fA-F]+\b'
+      scope: constant.numeric.hex.fun
+    - match: '\b\d+\.\d*([eE][+-]?\d+)?'
+      scope: constant.numeric.float.fun
+    - match: '\.\d+([eE][+-]?\d+)?'
+      scope: constant.numeric.float.fun
+    - match: '\b\d+[eE][+-]?\d+\b'
+      scope: constant.numeric.float.fun
+    - match: '\b\d+\b'
+      scope: constant.numeric.integer.fun
+
+  identifiers:
+    - match: '\b[A-Z][\w_]*\b'
+      scope: entity.name.class.fun
+    - match: '\b[a-zA-Z_]\w*\b'
+      scope: variable.other.fun

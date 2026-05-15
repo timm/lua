@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>FUN(1) | User Commands</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #1a1a1a;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">FUN(1) | User Commands</h1>
+</header>
+<h1 id="name">NAME</h1>
+<p><strong>fun</strong> — transpile and run a <em>fun</em> source file
+(a tiny Lua-targeted source language)</p>
+<h1 id="synopsis">SYNOPSIS</h1>
+<p><strong>fun</strong> <em>FILE</em> [<em>ARGS</em>…]</p>
+<h1 id="description">DESCRIPTION</h1>
+<p><em>fun</em> is a Lua-targeted source language whose transpiler is a
+single short Lua module (<code>fun.lua</code>). Source files use the
+<code>.fun</code> extension. The runner shim <code>fun</code> reads a
+<code>.fun</code> file, transpiles it to Lua via <code>fun.lua</code>,
+executes the result with the remaining arguments visible in Lua’s
+<code>arg</code> table, and forwards stdin/stdout/exit code.</p>
+<p>By the time the source reaches Lua, it <em>is</em> Lua. <em>fun</em>
+adds a small set of line-level rewrites that compile away — no runtime
+layer.</p>
+<h1 id="quick-start">QUICK START</h1>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="ex">./fun</span> foo.fun arg1 arg2</span></code></pre></div>
+<p>Inside <code>foo.fun</code>:</p>
+<pre class="fun"><code>#!/usr/bin/env ./fun
+-- vim: ft=fun
+
+let greet, sq
+
+greet = fun(name) ! &quot;hello, &quot;++name end
+sq    = fun(x)    ! x*x end
+
+print(greet(&quot;world&quot;))
+print(sq(5))</code></pre>
+<h1 id="language">LANGUAGE</h1>
+<h2 id="keyword-sugar">Keyword sugar</h2>
+<table>
+<thead>
+<tr>
+<th><em>fun</em></th>
+<th>Lua</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>fun</code></td>
+<td><code>function</code></td>
+<td>word-boundary substitution</td>
+</tr>
+<tr>
+<td><code>let</code></td>
+<td><code>local</code></td>
+<td>word-boundary substitution</td>
+</tr>
+<tr>
+<td><code>!</code></td>
+<td><code>return</code></td>
+<td>sigil; emits <code>return</code> + RHS</td>
+</tr>
+<tr>
+<td><code>++</code></td>
+<td><code>..</code></td>
+<td>string concat</td>
+</tr>
+</tbody>
+</table>
+<p>Substitutions are line-level. Strings (<code>"..."</code>,
+<code>'...'</code>, <code>[[...]]</code>) and trailing <code>--</code>
+comments are hidden before substitution and restored after, so
+<code>"!"</code>, <code>"++"</code>, etc. survive unchanged.</p>
+<h2 id="control-flow">Control flow</h2>
+<p><code>if</code> and <code>elseif</code> <strong>require
+parentheses</strong> around the condition; the transpiler injects
+<code>then</code>. <code>end</code> and <code>do</code> are written
+literally.</p>
+<pre class="fun"><code>if (x &gt; 0)
+  print(&quot;pos&quot;)
+elseif (x &lt; 0)
+  print(&quot;neg&quot;)
+else
+  print(&quot;zero&quot;)
+end</code></pre>
+<p><code>for</code>, <code>while</code>, <code>repeat ... until</code>
+use plain Lua syntax (<code>do</code>/<code>end</code> explicit, no
+sugar).</p>
+<h2 id="function-definitions">Function definitions</h2>
+<p><code>fun NAME(args) ... end</code> works like Lua’s
+<code>function</code>:</p>
+<pre class="fun"><code>fun sq(n) ! n*n end
+fun NUM.mid(i) ! i.mu end</code></pre>
+<p>Anonymous: <code>fun(args) ... end</code>.</p>
+<p>Named-as-local: combine with <code>let</code>:</p>
+<pre class="fun"><code>let helper = fun(x) ! x+1 end</code></pre>
+<p>A trailing <code>=</code> on a <code>fun(args)</code> line is
+silently stripped (so an old <code>name = fun(args) =</code> style still
+parses).</p>
+<h2 id="conditional-init">Conditional init: <code>?=</code></h2>
+<pre class="fun"><code>x ?= 42      -- if x == nil then x = 42 end</code></pre>
+<p>Statement-only; must start the line (optional indent allowed).</p>
+<h2 id="compound-assignment">Compound assignment</h2>
+<pre class="fun"><code>x += 1       -- x = x + 1
+y -= 2       -- y = y - 2
+z *= 3       -- etc.
+w /= 4</code></pre>
+<p>Operators: <code>+= -= *= /=</code>. <strong>LHS must be a single
+word</strong> (<code>%w+</code>) and <strong>RHS must be one
+whitespace-separated token</strong> (<code>%S+</code>).</p>
+<h2 id="line-continuation">Line continuation</h2>
+<p>A trailing <code>\</code> joins the next line; the joined-from
+physical line is replaced with a blank to <strong>preserve line
+numbers</strong> for error reporting.</p>
+<pre class="fun"><code>let result = some_function(arg1, arg2, \
+                           arg3, arg4)</code></pre>
+<p>This is the <strong>only</strong> way to span constructs across
+physical lines for features whose regex is per-line — see <em>one-line
+constraints</em> below.</p>
+<h2 id="comprehensions">Comprehensions</h2>
+<pre class="fun"><code>let squares = [x*x for x in xs]
+let evens   = [x   for x in xs if x % 2 == 0]</code></pre>
+<p>Compiles to an inline IIFE. If <code>iter</code> contains no
+<code>(</code>, the transpiler wraps:</p>
+<ul>
+<li>single loop var → <code>for _,v in ipairs(iter)</code></li>
+<li>comma in loop var → <code>for k,v in pairs(iter)</code></li>
+</ul>
+<p>If <code>iter</code> already contains <code>(</code>, it passes
+through verbatim.</p>
+<h2 id="strings-and-comments">Strings and comments</h2>
+<ul>
+<li><code>--</code> starts a single-line comment.</li>
+<li><code>--[[ ... ]]</code> is a long comment.</li>
+<li><code>[[ ... ]]</code> is a long string (multi-line, <strong>no
+interpolation</strong>).</li>
+<li><code>"..."</code>, <code>'...'</code> are regular strings
+(<strong>no interpolation</strong>).</li>
+<li>All string contents protected from substitution.</li>
+</ul>
+<h2 id="shebang">Shebang</h2>
+<p><code>#!/usr/bin/env ./fun</code> on line 1 makes the file directly
+executable; the transpiler converts the shebang to a Lua comment before
+loading.</p>
+<h1 id="options">OPTIONS</h1>
+<p>The <code>fun</code> runner takes no flags of its own. The first
+positional argument is the <code>.fun</code> file; remaining arguments
+are forwarded to the script via <code>arg[1]</code>,
+<code>arg[2]</code>, … <code>arg[0]</code> is set to the script
+path.</p>
+<h1 id="files">FILES</h1>
+<ul>
+<li><code>fun.lua</code> — the transpiler (a single Lua module).</li>
+<li><code>fun</code> — the runner shim
+(<code>#!/usr/bin/env lua</code>).</li>
+<li><code>*.fun</code> — <em>fun</em> source files.</li>
+<li><code>etc/funlexer.py</code> — Pygments lexer
+(<code>FunLexer</code>).</li>
+<li><code>etc/funpdf.sh</code> — <code>.fun</code> → PDF via pygmentize
++ pandoc + pdflatex.</li>
+<li><code>etc/syntax/fun.vim</code> — vim syntax (loaded via
+<code>etc/nvimfun.lua</code>).</li>
+<li><code>etc/nvimfun.lua</code>, <code>etc/nviminit.lua</code> — neovim
+filetype plugin.</li>
+</ul>
+<h1 id="diagnostics">DIAGNOSTICS</h1>
+<p>When the transpiled Lua fails to load, <code>fun</code> writes a
+5-line window around the offending line (<strong>transpiled</strong>
+Lua, not source) to stderr, then errors out. Line numbers refer to
+<strong>transpiled</strong> Lua, but the blank-pad trick on
+<code>\</code> joins keeps source and transpiled line numbers in
+lockstep, so the position usually points to the right physical source
+line.</p>
+<h1 id="one-line-constraints">ONE-LINE CONSTRAINTS</h1>
+<p>The transpiler runs substitutions <strong>per physical line</strong>
+(<code>src:gsub "[^\n]+"</code>). Several constructs must therefore fit
+on one line. Workaround: use <code>\</code> continuation.</p>
+<h2 id="if-...-elseif-...-one-line"><code>if (...)</code> /
+<code>elseif (...)</code> — one line</h2>
+<p>The injection regex matches <code>if</code> (or <code>elseif</code>)
+followed by a balanced-paren expression on the same line. Multi-line
+conditions need <code>\</code>:</p>
+<pre class="fun"><code>-- ✗ broken — closing paren on next physical line
+if (very_long_condition_part1 and
+    very_long_condition_part2)
+  ...
+
+-- ✓ join with backslash
+if (very_long_condition_part1 and \
+    very_long_condition_part2)
+  ...</code></pre>
+<h2 id="list-comprehensions-one-line">List comprehensions — one
+line</h2>
+<p><code>[expr for var in iter]</code> (and the <code>if</code>-guarded
+form) must fit on one line. The regex stops at the first matching
+<code>]</code>.</p>
+<pre class="fun"><code>-- ✗ broken — comprehension spans lines
+let xs = [transform(x)
+          for x in source]
+
+-- ✓ join with backslash
+let xs = [transform(x) \
+          for x in source]
+
+-- ✓ or extract the iterator first
+let it = source
+let xs = [transform(x) for x in it]</code></pre>
+<h2 id="one-line-statement-leading"><code>?=</code> — one line,
+statement-leading</h2>
+<p>Pattern: <code>^(%s*)(%w+)%s*?=%s*([^;]+)</code>. Indented allowed;
+the RHS runs up to <code>;</code> or end-of-line. Cannot follow other
+content on the same line.</p>
+<h2 id="compound---one-word-lhs">Compound
+<code>+=</code>/<code>-=</code>/<code>*=</code>/<code>/=</code> — one
+word LHS</h2>
+<p><code>(%w+)%s*([%+%-%*/])=%s+(%S+)</code>. Both sides
+constrained:</p>
+<ul>
+<li>LHS is a single <code>%w+</code> — <strong>no fields or
+indexing</strong>. <code>obj.field += 1</code> and
+<code>t[i] += 1</code> do <strong>not</strong> transform.</li>
+<li>RHS is <strong>one</strong> whitespace-separated token
+(<code>%S+</code>). <code>x += a + b</code> captures only
+<code>a</code>; the rest leaks.</li>
+</ul>
+<p>Workaround: write the expansion by hand or wrap RHS in parens with no
+internal whitespace — <code>x += (a+b)</code> works because
+<code>(a+b)</code> is one token.</p>
+<h2 id="comprehension-iterator-with-inside">Comprehension iterator with
+<code>]</code> inside</h2>
+<p>The regex stops at the <strong>first</strong> <code>]</code>. If
+<code>iter</code> contains a literal <code>]</code> (e.g. inside a Lua
+character class), the regex closes early:</p>
+<pre class="fun"><code>-- ✗ broken — `]` inside &quot;[^,]+&quot; closes the comprehension
+let t = [l.thing(x) for x in s:gmatch&quot;[^,]+&quot;]</code></pre>
+<p>Workaround: bind the iterator first.</p>
+<pre class="fun"><code>let it = s:gmatch&quot;[^,]+&quot;
+let t  = [l.thing(x) for x in it]</code></pre>
+<h1 id="other-quirks">OTHER QUIRKS</h1>
+<h2 id="substitutes-everywhere-outside-stringscomments"><code>!</code>
+substitutes everywhere outside strings/comments</h2>
+<p><code>!</code> is a literal global substitution to
+<code>return</code> (with trailing space). Lua identifiers can’t contain
+<code>!</code>, so accidental damage is rare, <strong>but</strong>:</p>
+<ul>
+<li><code>!=</code> becomes <code>return =</code> — broken. Use Lua’s
+<code>~=</code> for not-equal.</li>
+<li><code>not !x</code> becomes <code>not return x</code> — broken. Just
+write <code>not x</code>.</li>
+<li><code>if (x != y)</code> is <strong>wrong</strong>; write
+<code>if (x ~= y)</code>.</li>
+</ul>
+<h2 id="substitutes-everywhere"><code>++</code> substitutes
+everywhere</h2>
+<p><code>++</code> is a literal global substitution to <code>..</code>.
+There is no increment operator. <code>i++</code> becomes
+<code>i..</code> (broken). Use <code>i += 1</code>.</p>
+<h2 id="fun-and-let-use-word-boundaries"><code>fun</code> and
+<code>let</code> use word boundaries</h2>
+<p>Frontier patterns <code>%f[%w_]fun%f[%W]</code> and
+<code>%f[%w_]let%f[%W]</code>. So:</p>
+<ul>
+<li><code>letx</code> is <strong>not</strong> touched (no
+boundary).</li>
+<li><code>myfun</code> is <strong>not</strong> touched.</li>
+<li><code>funny</code> is <strong>not</strong> touched (<code>y</code>
+extends word).</li>
+<li><code>fun(</code> and <code>fun</code> and <code>let</code> are
+transformed.</li>
+</ul>
+<h2 id="string-hiding-does-not-handle--escaped-quotes">String hiding
+does not handle <code>\"</code>-escaped quotes</h2>
+<p>The hiding regex is <code>'"[^"]*"'</code>. Strings containing
+escaped quotes break the hiding:</p>
+<pre class="fun"><code>let bad = &quot;she said \&quot;hi\&quot;&quot;    -- hiding misparses this</code></pre>
+<p>Workaround: use single quotes, <code>[[...]]</code>, or split into
+pieces with <code>++</code> (which becomes <code>..</code>).</p>
+<h2 id="method-dispatch-on-plain-tables">Method dispatch on plain
+tables</h2>
+<p>Plain Lua tables have no methods. <code>xs:remove(n)</code> is
+<strong>not</strong> sugar for <code>table.remove(xs, n)</code> — Lua
+looks for a <code>remove</code> field and errors. Use
+<code>table.remove(xs, n)</code> or alias at top:
+<code>let tremove = table.remove</code>.</p>
+<h2 id="no-string-interpolation-anywhere">No string interpolation
+anywhere</h2>
+<p>Neither <code>"..."</code>, <code>'...'</code>, nor
+<code>[[...]]</code> interpolate <code>{var}</code>. Build strings with
+concatenation (<code>..</code> or <code>++</code>).</p>
+<h2 id="long-strings-span-multiple-lines-safely">Long strings span
+multiple lines safely</h2>
+<p><code>[[...]]</code> blocks are extracted from the whole source
+before line-by- line processing, so multi-line long strings (and blank
+lines inside them) work fine.</p>
+<h2 id="comments-are-passed-through-verbatim">Comments are passed
+through verbatim</h2>
+<p>A trailing <code>--</code> comment is split off before substitution
+and re- appended after, so anything inside a comment survives
+unchanged.</p>
+<h1 id="example">EXAMPLE</h1>
+<pre class="fun"><code>#!/usr/bin/env ./fun
+-- vim: ft=fun
+
+let Num, add
+
+Num = fun(s,n) ! {name=s, at=n, n=0, mu=0, m2=0, sd=0} end
+
+add = fun(c, v)
+  c.n += 1
+  let d = v - c.mu
+  c.mu += d / c.n
+  c.m2 += d * (v - c.mu)
+  c.sd  = c.n &lt; 2 and 0 or (c.m2 / (c.n - 1)) ^ 0.5
+  ! c
+end
+
+-- comprehension: build cumulative stats
+let xs = [add(Num(&quot;x&quot;,0), v) for v in {1,2,3,4,5}]
+print(xs[#xs].mu, xs[#xs].sd)</code></pre>
+<h1 id="see-also">SEE ALSO</h1>
+<p><code>lua(1)</code>, <code>pairs(3)</code>, <code>ipairs(3)</code>,
+<code>pygmentize(1)</code>, <code>pandoc(1)</code></p>
+<h1 id="authors">AUTHORS</h1>
+<p>Tim Menzies <a href="mailto:timm@ieee.org"
+class="email">timm@ieee.org</a>, with iterative collaboration.</p>
+</body>
+</html>

@@ -4,13 +4,26 @@ I:= $(shell git rev-parse --show-toplevel)
 help: ## show help.
 	@gawk  '\
 		BEGIN {FS = ":.*?##"; \
-           printf "\nUsage:\n  make \033[36m<target>\033[0m\n\ntargets:\n"} \
+           printf "\nUsage:\n  make \033[36m<target>\033[0m [VAR=val ...]\n\ntargets:\n"} \
          /^[~a-z0-9A-Z_%\.\/-]+:.*?##/ { \
-           printf("  \033[36m%-15s\033[0m %s\n", $$1, $$2) | "sort " } \
+           printf("  \033[36m%-20s\033[0m %s\n", $$1, $$2) | "sort " } \
 		'$(MAKEFILE_LIST)
+	@printf '\n\033[1;33m.fun -> PDF (any path: make /dir/foo.pdf finds foo.fun):\033[0m\n'
+	@printf '  Cols    number of cols   (default: $(Cols))\n'
+	@printf '  Font    font size pts    (default: $(Font))\n'
+	@printf '  Orient  landscape|portrait (default: $(Orient))\n'
+	@printf '  Style   pygments style   (default: $(Style); see: pygmentize -L styles)\n'
+	@printf '  LMargin left margin      (default: $(LMargin))\n'
+	@printf '  RMargin right margin     (default: $(RMargin))\n'
+	@printf '\n  example: make ~/tmp/ezr.pdf Cols=3 Font=5 Style=vs\n\n'
 
 push: ## save to cloud
 	@read -p "Reason? " msg; git commit -am "$$msg"; git push; git status
+
+PKGS ?= lua pygments pandoc gawk a2ps ghostscript luacheck pdflatex pycco bat
+
+install: ## install required tools (auto: brew/apt/dnf/pacman). vars: PKGS
+	@bash etc/install.sh $(PKGS)
 
 BLUE  := \033[34m
 YELLOW := \033[1;33m
@@ -56,14 +69,18 @@ $(HTML)/%.html: %.lua $I/etc/top.html
 Font ?=5
 Cols ?=3
 
-~/tmp/%.pdf : %.let Makefile $I/etc/let.ssh
-	@echo "pdfing : $@ ... "
-	@a2ps -Bj --landscape --line-numbers=1 --highlight-level=normal \
-		--borders=no --pro=color --right-footer="" --left-footer=""  \
-		--pretty-print=$I/etc/let.ssh --footer="page %p." -M letter \
-		--font-size=$(Font) --columns $(Cols) \
-		-o - $< | ps2pdf - $@
-	open $@
+Orient  ?= landscape
+Style   ?= friendly
+LMargin ?= 1.5cm
+RMargin ?= 0.5cm
+
+.SECONDEXPANSION:
+%.pdf : $$(notdir $$*).fun Makefile etc/funpdf.sh
+	@bash etc/funpdf.sh "$<" "$@" "$(Cols)" "$(Font)" "$(Orient)" "$(Style)" "$(LMargin)" "$(RMargin)"
+	@open $@
+
+docs/%.html : docs/%.md ## render markdown -> standalone html
+	pandoc -s -f markdown -t html $< -o $@
 
 ~/tmp/%.pdf : %.lua Makefile $I/etc/lua.ssh
 	@echo "pdfing : $@ ... "
@@ -74,22 +91,48 @@ Cols ?=3
 		-o - $< | ps2pdf - $@
 	open $@
 
-F?=tree.lua
-check:
+F ?= at.lua
+check: ## luacheck a .lua file (var: F)
 	luacheck --config $I/etc/check.rc $F
 
-CSVS=ls -r ~/gits/moot/optimize/*/*.csv | xargs -P 20 -I {} sh -c 
+# Pretty-print one paragraph of a .fun file to PDF.
+# usage: make snip S=keyword [SRC=file.fun]
+S    ?=
+SRC  ?= ezr.fun
+SDIR ?= /tmp/snip
 
-~/tmp/luatest.log :
-	@$(CSVS) 'lua ezr.lua --test {} 2>&1' | tee $@
-	cut -d \  -f 1 $@ | sort -n | fmt -65
+snip: ## render first para of $(SRC) matching S to PDF
+	@test -n "$(S)" || \
+	  (echo "usage: make snip S=keyword [SRC=file.fun]"; exit 1)
+	@mkdir -p $(SDIR)
+	@gawk -v pat="$(S)" 'BEGIN{RS="";ORS="\n\n"} \
+	   $$0 ~ pat {print; exit}' $(SRC) > $(SDIR)/snip.fun
+	@test -s $(SDIR)/snip.fun || \
+	  (echo "no paragraph matched: $(S)"; exit 1)
+	@pygmentize -x -l etc/funlexer.py:FunLexer \
+	  -f latex -O full,style=tango \
+	  -o $(SDIR)/snip.tex $(SDIR)/snip.fun
+	@cd $(SDIR) && pdflatex -interaction=batchmode snip.tex >/dev/null
+	@open $(SDIR)/snip.pdf
 
-~/tmp/lua1000.log:
-	sh etc/1000.sh | tee $@
-  
-D ?=  ~/gits/moot/optimize/misc/auto93.csv
-all: ## run all the tests
-	lua ezr.lua --all $D
+snip-tex: ## emit pygmentized LaTeX body to stdout (for | pbcopy)
+	@test -n "$(S)" || \
+	  (echo "usage: make snip-tex S=keyword" >&2; exit 1)
+	@gawk -v pat="$(S)" 'BEGIN{RS="";ORS="\n\n"} \
+	   $$0 ~ pat {print; exit}' $(SRC) \
+	 | pygmentize -x -l etc/funlexer.py:FunLexer \
+	     -f latex -O style=tango
 
-tree: ## demo, tree generation
-	lua ezr.lua -S 30 --tree $D | bat -l csv
+snip-listings: ## emit para wrapped in \begin{lstlisting}[language=Fun] (for | pbcopy)
+	@test -n "$(S)" || \
+	  (echo "usage: make snip-listings S=keyword" >&2; exit 1)
+	@printf '\\begin{lstlisting}[language=Fun]\n'
+	@gawk -v pat="$(S)" 'BEGIN{RS="";ORS="\n\n"} \
+	   $$0 ~ pat {print; exit}' $(SRC)
+	@printf '\\end{lstlisting}\n'
+
+snip-raw: ## emit raw .fun para to stdout (for | pbcopy)
+	@test -n "$(S)" || \
+	  (echo "usage: make snip-raw S=keyword" >&2; exit 1)
+	@gawk -v pat="$(S)" 'BEGIN{RS="";ORS="\n\n"} \
+	   $$0 ~ pat {print; exit}' $(SRC)
