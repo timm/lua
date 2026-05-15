@@ -76,10 +76,8 @@ contexts:
   operators:
     - match: '!'
       scope: keyword.control.return.fun
-    - match: '\?='
-      scope: keyword.operator.condinit.fun
-    - match: '\+=|-=|\*=|/='
-      scope: keyword.operator.assignment.compound.fun
+    - match: ':='
+      scope: keyword.operator.declare.fun
     - match: '==|~=|<=|>=|<|>|='
       scope: keyword.operator.comparison.fun
     - match: '\+|-|\*|/|//|%|\^|#|\.\.'

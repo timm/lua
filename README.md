@@ -3,16 +3,19 @@
 ![Version: 2026](https://img.shields.io/badge/Version-2026-green.svg)
 
 # NAME
-**tree.lua** — explainable multi-objective optimization via decision trees
+**ezr.fun** — explainable multi-objective optimization via decision trees,
+written in the **fun** language (a tiny Lua-targeted DSL).
 
 # SYNOPSIS
-**lua tree.lua** [*-B Budget*] [*-C Check*] [*-c cliffs*] [*-e eps*] [*-k ksconf*]
-             [*-l leaf*] [*-p p*] [*-s seed*] [*-S Show*] [*-h*] [*COMMAND*] [*FILE*]
+**./fun ezr.fun** [*-b bins*] [*-B Budget*] [*-C Check*] [*-c cliffs*] [*-e eps*]
+             [*-f file*] [*-k ksconf*] [*-l leaf*] [*-p p*] [*-s seed*]
+             [*-S Show*] [*-h*] [*COMMAND*]
 
 # DESCRIPTION
-**tree.lua** is a decision tree learner designed for multi-objective optimization. 
-It identifies regions of the search space that maximize objective scores by 
-recursively partitioning data. Unlike black-box optimizers, **tree.lua** provides human-readable rules (branches) explaining why certain decisions lead 
+**ezr.fun** is a decision tree learner designed for multi-objective optimization.
+It identifies regions of the search space that maximize objective scores by
+recursively partitioning data. Unlike black-box optimizers, **ezr.fun** provides
+human-readable rules (branches) explaining why certain decisions lead
 to better outcomes.
 
 The engine processes data where:
@@ -25,6 +28,10 @@ The optimization uses a distance-to-ideal metric ($disty$) to rank rows, then
 builds a tree to minimize the variance of these scores.
 
 # OPTIONS
+**-b bins**=4
+    Number of candidate cut points per numeric column (stride length
+    through sorted values).
+
 **-B Budget**=50
     Initial building budget. Defines the number of rows sampled to construct 
     the initial model.
@@ -39,6 +46,9 @@ builds a tree to minimize the variance of these scores.
 **-e eps**=0.35
     Cohen's threshold. Used to determine if the difference between two 
     distributions is negligible.
+
+**-f file**
+    Path to the input CSV file (default in help).
 
 **-k ksconf**=1.36
     Kolmogorov-Smirnov test confidence threshold.
@@ -59,24 +69,34 @@ builds a tree to minimize the variance of these scores.
     Show the help message and exit.
 
 # COMMANDS
-**csv** *FILE*
-    Reads the specified CSV file and prints every 30th row to stdout.
+All commands read the input file from `-f` (default in `-h` output).
 
-**data** *FILE*
-    Loads a dataset and prints summary statistics (median and spread) for 
-    all goal columns.
+**--the**
+    Print the current `the` config table.
 
-**tree** *FILE*
-    Constructs a decision tree from a sample of the data and displays the 
-    structure, showing the goal medians at each node.
+**--csv**
+    Read input CSV and print every 30th row.
 
-**ranks**
-    Runs a demonstration of the statistical ranking system using internal 
-    Weibull distributions.
+**--data**
+    Print median for each goal column.
 
-**test** *FILE*
-    Executes a cross-validation loop to evaluate how well the tree-based 
-    optimization predicts "winning" rows in unseen data.
+**--tree**
+    Build and display a decision tree from a budget-sized sample.
+
+**--ranks**
+    Demonstrate statistical ranking via Weibull samples.
+
+**--test**
+    Cross-validation: predict "winning" rows via the tree.
+
+**--testNum**, **--testSym**, **--testTree**, **--testStat**
+    Assert-based unit tests.
+
+**--all**
+    Run every command above; print assert pass count.
+
+**-h**
+    Show help and exit.
 
 # STATISTICS
 The tool employs three distinct checks to determine if two groups of rows 

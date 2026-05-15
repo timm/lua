@@ -85,6 +85,8 @@ docs/%.html : docs/%.md ## render markdown -> standalone html
 
 docs/%.tex : docs/%.md ## render markdown -> latex (uses fun listings)
 	@{ printf '\\documentclass[10pt,twocolumn]{article}\n'; \
+	   printf '\\usepackage[utf8]{inputenc}\n'; \
+	   printf '\\usepackage[T1]{fontenc}\n'; \
 	   printf '\\usepackage{listings}\n'; \
 	   printf '\\usepackage{xcolor}\n'; \
 	   printf '\\usepackage[margin=1cm]{geometry}\n'; \
@@ -114,33 +116,9 @@ F ?= at.lua
 check: ## luacheck a .lua file (var: F)
 	luacheck --config $I/etc/check.rc $F
 
-# Pretty-print one paragraph of a .fun file to PDF.
-# usage: make snip S=keyword [SRC=file.fun]
+# Snip: emit one .fun paragraph (matching $(S)) for piping.
 S    ?=
 SRC  ?= ezr.fun
-SDIR ?= /tmp/snip
-
-snip: ## render first para of $(SRC) matching S to PDF
-	@test -n "$(S)" || \
-	  (echo "usage: make snip S=keyword [SRC=file.fun]"; exit 1)
-	@mkdir -p $(SDIR)
-	@gawk -v pat="$(S)" 'BEGIN{RS="";ORS="\n\n"} \
-	   $$0 ~ pat {print; exit}' $(SRC) > $(SDIR)/snip.fun
-	@test -s $(SDIR)/snip.fun || \
-	  (echo "no paragraph matched: $(S)"; exit 1)
-	@pygmentize -x -l etc/funlexer.py:FunLexer \
-	  -f latex -O full,style=tango \
-	  -o $(SDIR)/snip.tex $(SDIR)/snip.fun
-	@cd $(SDIR) && pdflatex -interaction=batchmode snip.tex >/dev/null
-	@open $(SDIR)/snip.pdf
-
-snip-tex: ## emit pygmentized LaTeX body to stdout (for | pbcopy)
-	@test -n "$(S)" || \
-	  (echo "usage: make snip-tex S=keyword" >&2; exit 1)
-	@gawk -v pat="$(S)" 'BEGIN{RS="";ORS="\n\n"} \
-	   $$0 ~ pat {print; exit}' $(SRC) \
-	 | pygmentize -x -l etc/funlexer.py:FunLexer \
-	     -f latex -O style=tango
 
 snip-listings: ## emit para wrapped in \begin{lstlisting}[language=Fun] (for | pbcopy)
 	@test -n "$(S)" || \

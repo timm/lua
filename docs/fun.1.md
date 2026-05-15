@@ -3,39 +3,49 @@
 # NAME
 
 **fun** — transpile and run a *fun* source file (a tiny Lua-targeted
-source language)
+source language with Python-style `:` blocks and indent-closed bodies).
 
 # SYNOPSIS
 
-**fun** *FILE* [*ARGS*...]
+**fun** [*OPTS*] *FILE* [*ARGS*...]
 
 # DESCRIPTION
 
 *fun* is a Lua-targeted source language whose transpiler is a single
 short Lua module (`fun.lua`). Source files use the `.fun` extension.
-The runner shim `fun` reads a `.fun` file, transpiles it to Lua via
-`fun.lua`, executes the result with the remaining arguments visible in
-Lua's `arg` table, and forwards stdin/stdout/exit code.
+
+**The transpiler is strictly line-by-line.** Each physical line is
+parsed and rewritten in isolation. There is **no line-continuation
+character** — a backslash at end-of-line has no special meaning.
+The only cross-line state is an indent stack used to emit closing
+`end`s when a block's body outdents.
+
+This has direct consequences:
+
+- Conditions in `if (...)`, `elseif (...)`, `while (...)` **must
+  close on the same line**.
+- Comprehensions `[expr for v in iter (if c)]` **must fit on one
+  line**.
+- Long expressions that don't fit on one line must be broken via
+  intermediate locals, not by splitting one statement across lines.
 
 By the time the source reaches Lua, it *is* Lua. *fun* adds a small
-set of line-level rewrites that compile away — no runtime layer.
+set of per-line rewrites that compile away — no runtime layer.
 
 # QUICK START
 
 ```bash
 ./fun foo.fun arg1 arg2
+./fun -s foo.fun           # print transpiled Lua (no run)
+./fun -h                   # help
 ```
 
-Inside `foo.fun`:
-
 ```fun
-#!/usr/bin/env ./fun
+#!/usr/bin/env fun
 -- vim: ft=fun
 
-let greet, sq
-
-greet = fun(name) ! "hello, "..name end
-sq    = fun(x)    ! x*x end
+greet := fun(name): !"hello, "..name
+sq    := fun(x):    !x * x
 
 print(greet("world"))
 print(sq(5))
@@ -43,298 +53,319 @@ print(sq(5))
 
 # LANGUAGE
 
-## Keyword sugar
+## Sigils
 
-| *fun*  | Lua        | Notes                       |
-|--------|------------|-----------------------------|
-| `fun`  | `function` | word-boundary substitution  |
-| `let`  | `local`    | word-boundary substitution  |
-| `!`    | `return `  | sigil; emits `return ` + RHS |
+| *fun*    | Lua                  | Notes                              |
+|----------|----------------------|------------------------------------|
+| `fun`    | `function`           | word substitution                  |
+| `let`    | `local` (forward)    | for forward decls only             |
+| `NAME :=` | `local NAME =`      | declare + assign in body           |
+| `!`      | `return `            | sigil                              |
+| `:`      | (block introducer)   | see below                          |
 
-Substitutions are line-level. Strings (`"..."`, `'...'`, `[[...]]`)
-and trailing `--` comments are hidden before substitution and restored
-after, so `"!"` and other token-like contents survive unchanged.
+`fun` and `let` are word-boundary substitutions. Strings (`"..."`,
+`'...'`, `[[...]]`) and trailing `--` comments are protected.
 
-## Control flow
+## Declarations
 
-`if` and `elseif` **require parentheses** around the condition; the
-transpiler injects `then`. `end` and `do` are written literally.
+| Form                       | Meaning                                |
+|----------------------------|----------------------------------------|
+| `let a, b, c`              | forward-declare uninitialized locals   |
+| `x := 5`                   | new local `x` with value               |
+| `a, b := 1, 2`             | multi declare                          |
+| `x = 5`                    | reassign existing (local or forward)   |
+
+Use `let` ONLY at the top for forward refs (mutual recursion etc.).
+Inside bodies, use `:=` to introduce new locals.
+
+## Block introducer `:`
+
+`:` ends a header line and opens a block:
 
 ```fun
-if (x > 0)
+if (x > 0):
   print("pos")
-elseif (x < 0)
+elseif (x < 0):
   print("neg")
-else
+else:
   print("zero")
-end
 ```
 
-`for`, `while`, `repeat ... until` use plain Lua syntax (`do`/`end`
-explicit, no sugar).
+| Header           | Lua                |
+|------------------|--------------------|
+| `if (c):`        | `if (c) then`      |
+| `elseif (c):`    | `elseif (c) then`  |
+| `else:`          | `else`             |
+| `for X in Y:`    | `for X in Y do`    |
+| `while c:`       | `while c do`       |
+| `fun(args):`     | `function(args)`   |
 
-## Function definitions
+`if` / `elseif` **require parens** around the condition.
 
-`fun NAME(args) ... end` works like Lua's `function`:
+## Indent-closed blocks
+
+A line ending with `:` opens a block. The body is the consecutive
+following lines at greater indent. The transpiler emits `end` when
+indent returns to the header's level (or below).
 
 ```fun
-fun sq(n) ! n*n end
-fun NUM.mid(i) ! i.mu end
+foo := fun(x):
+  if (x > 0):
+    print("pos")
+    return 1
+  return 0
+-- foo's `end` emitted here automatically.
 ```
 
-Anonymous: `fun(args) ... end`.
+## One-liners (auto-end)
 
-Named-as-local: combine with `let`:
+If content follows `:` on the same line, it's a one-liner — the
+transpiler auto-appends `end`:
 
 ```fun
-let helper = fun(x) ! x+1 end
+sq    := fun(n): !n * n
+greet := fun(s): !"hi "..s
+if (x > 0): print("pos")
+for i in xs: print(i)
 ```
 
-A trailing `=` on a `fun(args)` line is silently stripped (so an old
-`name = fun(args) =` style still parses).
+becomes
 
-## Conditional init: `?=`
+```lua
+local sq    = function(n) return n * n end
+local greet = function(s) return "hi "..s end
+if (x > 0) then print("pos") end
+for _,i in ipairs(xs) do print(i) end
+```
+
+Auto-end is **skipped** if the line already contains `end`. So:
 
 ```fun
-x ?= 42      -- if x == nil then x = 42 end
+sort(xs, fun(a,b): !a < b end)
 ```
 
-Statement-only; must start the line (optional indent allowed).
+The user-supplied `end` closes the inline lambda; the call closes
+with `)`. No auto-end injected.
 
-## Compound assignment
+## Inline lambdas in expressions
+
+Anonymous `fun(args):` inside a call/argument list keep an explicit
+`end` (the call's `,`/`)` continues the expression; indent can't
+close it reliably):
 
 ```fun
-x += 1       -- x = x + 1
-y -= 2       -- y = y - 2
-z *= 3       -- etc.
-w /= 4
+sort(xs, fun(a,b): !a < b end)
+table.sort(t, fun(a,b): !a[1] < b[1] end)
 ```
 
-Operators: `+= -= *= /=`. **LHS must be a single word** (`%w+`) and
-**RHS must be one whitespace-separated token** (`%S+`).
+### Tip: avoid the explicit `end` by extracting the lambda
 
-## Line continuation
-
-A trailing `\` joins the next line; the joined-from physical line is
-replaced with a blank to **preserve line numbers** for error reporting.
+Bind the lambda to a local first — both functions then close via
+indent, no explicit `end` anywhere:
 
 ```fun
-let result = some_function(arg1, arg2, \
-                           arg3, arg4)
+-- ✗ inline lambda needs explicit `end` to close before `)`:
+show := fun(tree):
+  nodes(tree, fun(node, lvl, pre):
+    p := ...
+    io.write(...)
+  end)
+
+-- ✓ extract to a local — outdent closes both funs cleanly:
+show := fun(tree):
+  fn := fun(node, lvl, pre):
+    p := ...
+    io.write(...)
+  nodes(tree, fn)
 ```
 
-This is the **only** way to span constructs across physical lines for
-features whose regex is per-line — see *one-line constraints* below.
+Same Lua output, less syntactic noise. Useful for any multi-line
+anonymous fun passed as an argument.
+
+## Return
+
+`!` at line start (or after a `:`) becomes `return `:
+
+```fun
+foo := fun(x): !x * 2          -- return x*2
+bar := fun(x):
+  if (x > 0): !x
+  !-x
+```
 
 ## Comprehensions
 
 ```fun
-let squares = [x*x for x in xs]
-let evens   = [x   for x in xs if x % 2 == 0]
+squares := [x*x for x in xs]
+evens   := [x for x in xs if x % 2 == 0]
+labels  := [t.name for t in tasks if t.done]
 ```
 
-Compiles to an inline IIFE (immediately invoked function expression). If `iter` contains no `(`, the transpiler
-wraps:
+Compile to an inline IIFE. The transpiler uses balanced-bracket
+parsing, so `r[col.at]`-style indexing inside expr works:
 
+```fun
+xs := [r[col.at] for _,r in ipairs(rows) if r[col.at] ~= "?"]
+```
+
+Iterator handling:
 - single loop var → `for _,v in ipairs(iter)`
 - comma in loop var → `for k,v in pairs(iter)`
+- iter contains `(` → passed through verbatim
 
-If `iter` already contains `(`, it passes through verbatim.
+**Comprehensions must fit on one line.**
 
 ## Strings and comments
 
-- `--` starts a single-line comment.
-- `--[[ ... ]]` is a long comment.
-- `[[ ... ]]` is a long string (multi-line, **no interpolation**).
-- `"..."`, `'...'` are regular strings (**no interpolation**).
-- All string contents protected from substitution.
-
-## Shebang
-
-`#!/usr/bin/env ./fun` on line 1 makes the file directly executable;
-the transpiler converts the shebang to a Lua comment before loading.
+- `--` single-line comment
+- `--[[ ... ]]` long comment
+- `[[ ... ]]` long string (multi-line, no interpolation)
+- `"..."`, `'...'` regular strings (no interpolation)
 
 # OPTIONS
 
-The `fun` runner takes no flags of its own. The first positional
-argument is the `.fun` file; remaining arguments are forwarded to the
-script via `arg[1]`, `arg[2]`, ... `arg[0]` is set to the script path.
+`fun [opts] FILE [args]`:
+
+| flag        | meaning                                          |
+|-------------|--------------------------------------------------|
+| `-h`        | print help                                       |
+| `-s`        | print transpiled Lua to stdout (no execution)    |
+
+Remaining args go to the script via `arg[1]`, `arg[2]`, ... and
+`arg[0]` is the script path.
 
 # FILES
 
-- `fun.lua` — the transpiler (a single Lua module).
-- `fun` — the runner shim (`#!/usr/bin/env lua`).
-- `*.fun` — *fun* source files.
-- `etc/funlexer.py` — Pygments lexer (`FunLexer`).
-- `etc/funpdf.sh` — `.fun` → PDF via pygmentize + pandoc + pdflatex.
-- `etc/syntax/fun.vim` — vim syntax (loaded via `etc/nvimfun.lua`).
-- `etc/nvimfun.lua`, `etc/nviminit.lua` — neovim filetype plugin.
+- `fun.lua` — transpiler module
+- `fun` — runner shim
+- `*.fun` — source files
+- `etc/funlexer.py` — Pygments lexer (`FunLexer`)
+- `etc/funpdf.sh` — `.fun` → PDF
+- `etc/syntax/fun.vim` — vim syntax
+- `etc/nvimfun.lua`, `etc/nviminit.lua` — neovim filetype
+- `etc/bat/syntaxes/Fun.sublime-syntax` — bat syntax
+- `etc/fun-listings.tex` — LaTeX listings def
 
 # DIAGNOSTICS
 
-When the transpiled Lua fails to load, `fun` writes a 5-line window
-around the offending line (**transpiled** Lua, not source) to stderr,
-then errors out. Line numbers refer to **transpiled** Lua, but the
-blank-pad trick on `\` joins keeps source and transpiled line numbers
-in lockstep, so the position usually points to the right physical
-source line.
+When transpiled Lua fails to load, `fun` writes a 5-line window
+around the offending **transpiled** line to stderr, then errors. Line
+numbers track source closely (per-line transpile preserves line
+count; comprehension expansion pads newlines).
 
-# ONE-LINE CONSTRAINTS
+To see the transpiled output:
 
-The transpiler runs substitutions **per physical line** (`src:gsub
-"[^\n]+"`). Several constructs must therefore fit on one line.
-Workaround: use `\` continuation.
-
-## `if (...)` / `elseif (...)` — one line
-
-The injection regex matches `if` (or `elseif`) followed by a
-balanced-paren expression on the same line. Multi-line conditions
-need `\`:
-
-```fun
--- ✗ broken — closing paren on next physical line
-if (very_long_condition_part1 and
-    very_long_condition_part2)
-  ...
-
--- ✓ join with backslash
-if (very_long_condition_part1 and \
-    very_long_condition_part2)
-  ...
+```bash
+./fun -s file.fun
 ```
 
-## List comprehensions — one line
+# RESTRICTIONS
 
-`[expr for var in iter]` (and the `if`-guarded form) must fit on one
-line. The regex stops at the first matching `]`.
+## Line-by-line — no continuation
+
+The transpiler processes one source line at a time. **No `\`
+continuation, no implicit continuation.** Each `if`/`elseif`/`while`
+header and each comprehension must fit on one line.
+
+If a line gets too long, factor with intermediate locals:
 
 ```fun
--- ✗ broken — comprehension spans lines
-let xs = [transform(x)
-          for x in source]
+-- ✗ too long, no way to wrap
+result := some_long_call(arg_one, arg_two, ... arg_seven)
 
--- ✓ join with backslash
-let xs = [transform(x) \
-          for x in source]
-
--- ✓ or extract the iterator first
-let it = source
-let xs = [transform(x) for x in it]
+-- ✓ split via locals
+args1 := (arg_one)
+args2 := (arg_two)
+result := some_long_call(args1, args2, ...)
 ```
 
-## `?=` — one line, statement-leading
+Or for a long condition:
 
-Pattern: `^(%s*)(%w+)%s*?=%s*([^;]+)`. Indented allowed; the RHS runs
-up to `;` or end-of-line. Cannot follow other content on the same
-line.
+```fun
+-- ✗
+if (x > 0 and y > 0 and z > 0 and w > 0):
+  body
 
-## Compound `+=`/`-=`/`*=`/`/=` — one word LHS
-
-`(%w+)%s*([%+%-%*/])=%s+(%S+)`. Both sides constrained:
-
-- LHS is a single `%w+` — **no fields or indexing**. `obj.field += 1`
-  and `t[i] += 1` do **not** transform.
-- RHS is **one** whitespace-separated token (`%S+`). `x += a + b`
-  captures only `a`; the rest leaks.
-
-Workaround: write the expansion by hand or wrap RHS in parens with no
-internal whitespace — `x += (a+b)` works because `(a+b)` is one token.
+-- ✓
+all_pos := x > 0 and y > 0 and z > 0 and w > 0
+if (all_pos):
+  body
+```
 
 ## Comprehension iterator with `]` inside
 
-The regex stops at the **first** `]`. If `iter` contains a literal
-`]` (e.g. inside a Lua character class), the regex closes early:
+Iterator content can't contain literal `]` (e.g. `:gmatch"[^,]+"`).
+Bind the iterator first:
 
 ```fun
--- ✗ broken — `]` inside "[^,]+" closes the comprehension
-let t = [l.thing(x) for x in s:gmatch"[^,]+"]
+-- ✗ broken
+t := [thing(x) for x in s:gmatch"[^,]+"]
+
+-- ✓
+it := s:gmatch"[^,]+"
+t  := [thing(x) for x in it]
 ```
 
-Workaround: bind the iterator first.
+## Indent rules
 
-```fun
-let it = s:gmatch"[^,]+"
-let t  = [l.thing(x) for x in it]
-```
+- Tabs count as 2 spaces (or pick consistent indent — don't mix)
+- `elseif` / `else` continue the open `if` block (no premature close)
+- Block bodies must indent **more** than their header
+- Outdent below header indent closes the block
 
-# OTHER QUIRKS
+## `!` substitutes globally
 
-## `!` substitutes everywhere outside strings/comments
+`!` outside strings/comments becomes `return `. So:
+- `!=` becomes `return =` — broken. Use `~=`.
+- `not !x` becomes `not return x` — broken. Use `not x`.
 
-`!` is a literal global substitution to `return ` (with trailing
-space). Lua identifiers can't contain `!`, so accidental damage is
-rare, **but**:
+## `:=` only at statement start
 
-- `!=` becomes `return =` — broken. Use Lua's `~=` for not-equal.
-- `not !x` becomes `not return x` — broken. Just write `not x`.
-- `if (x != y)` is **wrong**; write `if (x ~= y)`.
+The `:=` pattern matches at the start of a line (after optional
+whitespace). Don't use it mid-expression.
 
-## `fun` and `let` use word boundaries
+## Method `:` vs block `:`
 
-Frontier patterns `%f[%w_]fun%f[%W]` and `%f[%w_]let%f[%W]`. So:
+The `:` is a method-call when followed immediately by an identifier
+(`obj:method()`). It's a block introducer when followed by whitespace
+or end-of-line (`if (c):`, `fun(x): body`).
 
-- `letx` is **not** touched (no boundary).
-- `myfun` is **not** touched.
-- `funny` is **not** touched (`y` extends word).
-- `fun(` and `fun ` and `let ` are transformed.
+## Plain tables have no methods
+
+`xs:remove(n)` looks for a `remove` field; standard Lua. Use
+`table.remove(xs, n)`.
 
 ## String hiding does not handle `\"`-escaped quotes
 
-The hiding regex is `'"[^"]*"'`. Strings containing escaped quotes
-break the hiding:
-
-```fun
-let bad = "she said \"hi\""    -- hiding misparses this
-```
-
-Workaround: use single quotes, `[[...]]`, or split into pieces with
-Lua's `..` concat.
-
-## Method dispatch on plain tables
-
-Plain Lua tables have no methods. `xs:remove(n)` is **not** sugar for
-`table.remove(xs, n)` — Lua looks for a `remove` field and errors.
-Use `table.remove(xs, n)` or alias at top: `let tremove =
-table.remove`.
-
-## No string interpolation anywhere
-
-Neither `"..."`, `'...'`, nor `[[...]]` interpolate `{var}`. Build
-strings with Lua's `..` concat.
-
-## Long strings span multiple lines safely
-
-`[[...]]` blocks are extracted from the whole source before line-by-
-line processing, so multi-line long strings (and blank lines inside
-them) work fine.
-
-## Comments are passed through verbatim
-
-A trailing `--` comment is split off before substitution and re-
-appended after, so anything inside a comment survives unchanged.
+The hiding regex is `'"[^"]*"'`. Escaped quotes break it. Use single
+quotes, `[[...]]`, or split via `..`.
 
 # EXAMPLE
 
 ```fun
-#!/usr/bin/env ./fun
+#!/usr/bin/env fun
 -- vim: ft=fun
 
-let Num, add
+NUM := "Num"   -- type marker
+Num := fun(txt, at):
+  !{is=NUM, txt=txt or "", at=at or 0,
+    n=0, mu=0, m2=0}
 
-Num = fun(s,n) ! {name=s, at=n, n=0, mu=0, m2=0, sd=0} end
+add := fun(num, v):
+  num.n = num.n + 1
+  d := v - num.mu
+  num.mu = num.mu + d / num.n
+  num.m2 = num.m2 + d * (v - num.mu)
+  !num
 
-add = fun(c, v)
-  c.n += 1
-  let d = v - c.mu
-  c.mu += d / c.n
-  c.m2 += d * (v - c.mu)
-  c.sd  = c.n < 2 and 0 or (c.m2 / (c.n - 1)) ^ 0.5
-  ! c
-end
+mid := fun(num): !num.mu
 
--- comprehension: build cumulative stats
-let xs = [add(Num("x",0), v) for v in {1,2,3,4,5}]
-print(xs[#xs].mu, xs[#xs].sd)
+adds := fun(values):
+  out := Num()
+  for _,v in ipairs(values): add(out, v)
+  !out
+
+print(mid(adds({1,2,3,4,5})))
 ```
 
 # SEE ALSO
@@ -343,4 +374,4 @@ print(xs[#xs].mu, xs[#xs].sd)
 
 # AUTHORS
 
-Tim Menzies <timm@ieee.org>, with iterative collaboration.
+Tim Menzies <timm@ieee.org>.
