@@ -68,8 +68,7 @@ local function showCtx(lua, n)
   end
 end
 
-return function(file)
-  if loaded[file] then return loaded[file] end
+local function transpile(file)
   local src = io.open(file):read"*a"
                            :gsub("^#!", "--")
                            :gsub("([^\n]*)\\\n([^\n]*)\n", "%1 %2\n\n")
@@ -77,8 +76,13 @@ return function(file)
   src = src:gsub("%[%[.-%]%]", function(m)
     longs[#longs+1] = m; return "\2"..#longs.."\2"
   end)
-  local lua = src:gsub("[^\n]+", line)
-                 :gsub("\2(%d+)\2", function(n) return longs[tonumber(n)] end)
+  return src:gsub("[^\n]+", line)
+            :gsub("\2(%d+)\2", function(n) return longs[tonumber(n)] end)
+end
+
+local function run(file)
+  if loaded[file] then return loaded[file] end
+  local lua = transpile(file)
   local fn, err = load(lua, file)
   if not fn then
     showCtx(lua, tonumber((err or ""):match":(%d+):") or 0)
@@ -87,3 +91,6 @@ return function(file)
   loaded[file] = fn() or true
   return loaded[file]
 end
+
+return setmetatable({transpile=transpile, run=run},
+                    {__call=function(_,f) return run(f) end})

@@ -40,8 +40,7 @@ Tree= fun(fn_score)
 -- Symbolic (categorical) column.
 let SYM={}
 Sym= fun(s,n)
-  !l.new(SYM,
-         {txt=s or "", at=n or 0, has={}, n=0}) end
+  !l.new(SYM, {txt=s or "", at=n or 0, has={}, n=0}) end
 
 -- Numeric column. Trailing "-" => minimize (heaven=0).
 let NUM={}
@@ -67,8 +66,7 @@ Cols= fun(ss_names)
 -- Data container: rows + summarized columns.
 let DATA={}
 Data= fun(src)
-  let data= l.new(DATA,
-                  {rows={}, cols=nil, _mid=nil})
+  let data= l.new(DATA, {rows={}, cols=nil, _mid=nil})
   if (type(src) == "string")
     for row in l.csv(src) do add(data, row) end
   else
@@ -144,20 +142,17 @@ SYM.mid= fun(i)
 
 -- Midpoints across all columns.
 DATA.mid= fun(i)
-  i._mid= i._mid or
-          l.map(i.cols.all, fun(c) !c:mid() end)
+  i._mid= i._mid or l.map(i.cols.all, fun(c) !c:mid() end)
   !i._mid end
 
 -- Spread: stdev for nums.
 NUM.spread= fun(i)
-  !i.n > 1
-    and (max(0, i.m2)/(i.n-1)) ^ 0.5 or 0 end
+  !i.n > 1 and (max(0, i.m2)/(i.n-1)) ^ 0.5 or 0 end
 
 -- Spread: entropy for syms.
 SYM.spread= fun(i)
   let n= 0
-  for _,v in pairs(i.has) do
-    n -= (v/i.n * log(v/i.n,2)) end
+  for _,v in pairs(i.has) do n -= (v/i.n * log(v/i.n,2)) end
   !n end
 
 -- Sigmoid normalization.
@@ -168,9 +163,8 @@ NUM.norm= fun(i,v)
 
 -- Minkowski distance to ideal goal.
 DATA.disty= fun(i,row)
-  let fn= fun(col)
-           let x= col:norm(row[col.at]) - col.heaven
-           !abs(x) ^ the.p end
+  let fn= fun(col) let x= col:norm(row[col.at]) - col.heaven
+                   !abs(x) ^ the.p end
   let s= l.sum(i.cols.y, fn) / #i.cols.y
   !s ^ (1 / the.p) end
 
@@ -179,10 +173,9 @@ wins= fun(data)
   let f= fun(row) !data:disty(row) end
   let ys= l.sort(l.map(data.rows, f))
   let lo, n_mid= ys[1], ys[#ys // 2 + 1]
-  let g= fun(row)
-          let d= data:disty(row)
-          let r= (d - lo) / (n_mid - lo + 1e-32)
-          !floor(100 * (1 - r)) end
+  let g= fun(row) let d= data:disty(row)
+                  let r= (d - lo) / (n_mid - lo + 1e-32)
+                  !floor(100 * (1 - r)) end
   !g end
 
 -- ## Tree
@@ -190,9 +183,8 @@ wins= fun(data)
 TREE.build= fun(i,data,rows)
   let mid= data:clone(rows):mid()
   i.y= adds([i.score(r) for r in rows])
-  i.mids= l.kv(data.cols.y,
-               fun(c) !c.txt end,
-               fun(c) !mid[c.at] end)
+  i.mids= l.kv(data.cols.y, fun(c) !c.txt end, 
+                            fun(c) !mid[c.at] end)
   if (#rows < 2 * the.leaf) !i end
   let best, bestW= nil, 1E32
   for _,col in ipairs(data.cols.x) do
@@ -203,14 +195,13 @@ TREE.build= fun(i,data,rows)
       let w= a + b
       let ok= min(#cut.left,#cut.right) >= the.leaf
       if (w < bestW and ok)
-        best, bestW= cut, w end end end
+        best, bestW= cut, w end end end 
   if (best)
     i.col= best.col
     i.cut= best.cut
     i.at = best.col.at
     i.left = Tree(i.score):build(data, best.left)
-    i.right= Tree(i.score):build(data, best.right)
-    end
+    i.right= Tree(i.score):build(data, best.right) end
   !i end
 
 -- Traverse tree to relevant leaf.
