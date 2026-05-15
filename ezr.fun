@@ -1,4 +1,4 @@
-#!/usr/bin/env ./fun
+#!/usr/bin/env fun
 -- vim: ft=fun
 let the, help= {}, [[
 ezr.fun : explainable multi-objective optimization
@@ -283,26 +283,36 @@ SYM.splits= fun(i,rows,fn)
   !out end
 
 -- ## Stats
--- Same? Cohen / Cliff's delta / KS test.
-let same= fun(xs,ys,eps)
+-- Cliff's delta (bisect-optimized): non-overlap proportion.
+let cliffsDelta= fun(xs,ys)
+  let n, m= #xs, #ys
+  let ngt, nlt= 0, 0
+  for _,v in ipairs(xs) do
+    ngt= ngt + l.bisect(ys, v)
+    nlt= nlt + (m - l.bisect(ys, v + 1e-32)) end
+  !abs(ngt - nlt) / (n * m) end
+
+-- Kolmogorov-Smirnov: max CDF gap between xs and ys.
+let ks= fun(xs,ys)
+  let n, m= #xs, #ys
+  let d= 0
+  let gap= fun(v)
+            let a= l.bisect(xs,v) / n
+            let b= l.bisect(ys,v) / m
+            !abs(a - b) end
+  for _,v in ipairs(xs) do d= max(d, gap(v)) end
+  for _,v in ipairs(ys) do d= max(d, gap(v)) end
+  !d end
+
+-- Same? Cohen's d (cheap) gate, then Cliff's delta, then KS.
+same= fun(xs,ys,eps)
   xs, ys= l.sort(xs), l.sort(ys)
   let n, m= #xs, #ys
   let mx= xs[n // 2 + 1]
   let my= ys[m // 2 + 1]
   if (abs(mx - my) <= eps) !true end
-  let ngt, nlt= 0, 0
-  for _,v in ipairs(xs) do
-    ngt= ngt + l.bisect(ys, v)
-    nlt= nlt + (m - l.bisect(ys, v + 1e-32)) end
-  if (abs(ngt-nlt)/(n*m) > the.cliffs) !false end
-  let ks= 0
-  let fn= fun(v)
-           let a= l.bisect(xs,v)/n
-           let b= l.bisect(ys,v)/m
-           !abs(a - b) end
-  for _,v in ipairs(xs) do ks= max(ks, fn(v)) end
-  for _,v in ipairs(ys) do ks= max(ks, fn(v)) end
-  !ks <= the.ksconf * ((n+m) / (n*m)) ^ 0.5 end 
+  if (cliffsDelta(xs,ys) > the.cliffs) !false end
+  !ks(xs,ys) <= the.ksconf * ((n+m) / (n*m)) ^ 0.5 end
 
 -- Group results into top-tier ranks.
 let bestRanks= fun(dict)

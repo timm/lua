@@ -20,7 +20,6 @@ syntax region funIfBlock transparent matchgroup=funKeyword
 
 syntax keyword funKeyword  let else elseif
 syntax match   funReturn   /!/
-syntax match   funConcat   /++/
 syntax match   funCondInit /?=/
 syntax match   funCompound /\v(\+|-|\*|\/)\=/
 
@@ -29,7 +28,6 @@ syntax match   funOrphanEnd /\<end\>/
 
 highlight default link funKeyword  Keyword
 highlight default link funReturn   Special
-highlight default link funConcat   Operator
 highlight default link funCondInit Operator
 highlight default link funCompound Operator
 highlight default link funOrphanEnd Error

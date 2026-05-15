@@ -34,7 +34,7 @@ Inside `foo.fun`:
 
 let greet, sq
 
-greet = fun(name) ! "hello, "++name end
+greet = fun(name) ! "hello, "..name end
 sq    = fun(x)    ! x*x end
 
 print(greet("world"))
@@ -50,11 +50,10 @@ print(sq(5))
 | `fun`  | `function` | word-boundary substitution  |
 | `let`  | `local`    | word-boundary substitution  |
 | `!`    | `return `  | sigil; emits `return ` + RHS |
-| `++`   | `..`       | string concat               |
 
 Substitutions are line-level. Strings (`"..."`, `'...'`, `[[...]]`)
 and trailing `--` comments are hidden before substitution and restored
-after, so `"!"`, `"++"`, etc. survive unchanged.
+after, so `"!"` and other token-like contents survive unchanged.
 
 ## Control flow
 
@@ -134,7 +133,7 @@ let squares = [x*x for x in xs]
 let evens   = [x   for x in xs if x % 2 == 0]
 ```
 
-Compiles to an inline IIFE. If `iter` contains no `(`, the transpiler
+Compiles to an inline IIFE (immediately invoked function expression). If `iter` contains no `(`, the transpiler
 wraps:
 
 - single loop var → `for _,v in ipairs(iter)`
@@ -270,11 +269,6 @@ rare, **but**:
 - `not !x` becomes `not return x` — broken. Just write `not x`.
 - `if (x != y)` is **wrong**; write `if (x ~= y)`.
 
-## `++` substitutes everywhere
-
-`++` is a literal global substitution to `..`. There is no increment
-operator. `i++` becomes `i..` (broken). Use `i += 1`.
-
 ## `fun` and `let` use word boundaries
 
 Frontier patterns `%f[%w_]fun%f[%W]` and `%f[%w_]let%f[%W]`. So:
@@ -294,7 +288,7 @@ let bad = "she said \"hi\""    -- hiding misparses this
 ```
 
 Workaround: use single quotes, `[[...]]`, or split into pieces with
-`++` (which becomes `..`).
+Lua's `..` concat.
 
 ## Method dispatch on plain tables
 
@@ -306,7 +300,7 @@ table.remove`.
 ## No string interpolation anywhere
 
 Neither `"..."`, `'...'`, nor `[[...]]` interpolate `{var}`. Build
-strings with concatenation (`..` or `++`).
+strings with Lua's `..` concat.
 
 ## Long strings span multiple lines safely
 

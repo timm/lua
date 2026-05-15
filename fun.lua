@@ -1,5 +1,5 @@
 -- fun.lua : ".fun" -> Lua transpiler.
--- fun = function   let = local   ! = return   ++ = concat
+-- fun = function   let = local   ! = return
 -- `if (cond)` / `elseif (cond)` : paren required, `then` injected.
 -- `end`/`do` written literally.
 -- `\` at line end joins next line (blank-pad preserves line numbers).
@@ -32,7 +32,6 @@ local function line(b)
        :gsub("%f[%w_]if(%s*%b())",     "if%1 then")
        :gsub("%f[%w_]elseif(%s*%b())", "elseif%1 then")
        :gsub("function(%b())%s*=%s*$", "function%1")
-       :gsub("%+%+",      "..")
        :gsub("!",         "return ")
        :gsub("%[(.-) for (.-) in (.-) if (.-)%]", comp)
        :gsub("%[(.-) for (.-) in (.-)%]",         comp)

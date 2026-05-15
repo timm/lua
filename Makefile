@@ -82,6 +82,24 @@ RMargin ?= 0.5cm
 docs/%.html : docs/%.md ## render markdown -> standalone html
 	pandoc -s -f markdown -t html $< -o $@
 
+docs/%.tex : docs/%.md ## render markdown -> latex (uses fun listings)
+	@{ printf '\\documentclass[10pt,twocolumn]{article}\n'; \
+	   printf '\\usepackage{listings}\n'; \
+	   printf '\\usepackage{xcolor}\n'; \
+	   printf '\\usepackage[margin=1cm]{geometry}\n'; \
+	   printf '\\usepackage{longtable,booktabs,array}\n'; \
+	   printf '\\newcounter{none}\n'; \
+	   printf '\\providecommand{\\passthrough}[1]{#1}\n'; \
+	   printf '\\providecommand{\\tightlist}{\\setlength{\\itemsep}{0pt}\\setlength{\\parskip}{0pt}}\n'; \
+	   printf '\\input{fun}\n\n'; \
+	   printf '\\begin{document}\n\n'; \
+	   pandoc --listings -f markdown -t latex $< 2>/dev/null \
+	     | sed -e 's/language=fun/language=Fun/g' \
+	           -e 's/^\\begin{lstlisting}$$/\\begin{lstlisting}[language=Fun]/'; \
+	   printf '\n\\end{document}\n'; \
+	 } > $@
+	@echo "wrote $@ (companion: etc/fun-listings.tex -> upload as fun.tex)"
+
 ~/tmp/%.pdf : %.lua Makefile $I/etc/lua.ssh
 	@echo "pdfing : $@ ... "
 	@a2ps -Bj --landscape --line-numbers=1 --highlight-level=normal \

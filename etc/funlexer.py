@@ -1,4 +1,4 @@
-"""Pygments lexer for .fun (Lua + fun/let/! /++ )."""
+"""Pygments lexer for .fun (Lua + fun/let/!)."""
 from pygments.lexer import RegexLexer, bygroups, words
 from pygments.token import (Comment, Keyword, Name, Number,
                             Operator, Punctuation, String, Text)
@@ -22,7 +22,6 @@ class FunLexer(RegexLexer):
              "params"),
             (r"\blet\b", Keyword.Declaration),
             (r"!", Keyword),
-            (r"\+\+", Operator),
             (r"\?=", Operator),
             (r"(==|~=|<=|>=|<|>|=)", Operator),
             (r"(\+|-|\*|/|//|%|\^|#|\.\.)", Operator),

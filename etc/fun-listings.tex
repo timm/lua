@@ -3,7 +3,9 @@
 % Usage in Overleaf (or any LaTeX):
 %   \usepackage{listings}
 %   \usepackage{xcolor}
-%   \input{fun-listings}        % this file
+%   \input{fun-listings}        % this file (loads inconsolata)
+
+\usepackage{inconsolata}
 %   ...
 %   \begin{lstlisting}[language=Fun]
 %   let add = fun(x,y) ! x + y end
@@ -26,21 +28,36 @@
   morestring=[b]",
   morestring=[b]',
   morestring=[s]{[[}{]]},
-  literate=%
-    {!}{{{\textcolor{funSig}{\bfseries !}}}}1%
-    {++}{{{\textcolor{funSig}{\bfseries ++}}}}2%
-    {?=}{{{\textcolor{funSig}{?=}}}}2,
   keywordstyle=[1]\color{funKey}\bfseries,
   keywordstyle=[2]\color{funBuiltin},
   commentstyle=\color{funCmt}\itshape,
   stringstyle=\color{funStr},
-  basicstyle=\ttfamily\small,
+  basicstyle=\ttfamily\fontsize{6.5}{7.5}\selectfont,
+  columns=fullflexible,
+  keepspaces=true,
+  extendedchars=true,
+  inputencoding=utf8,
+  literate=%
+    {!}{{{\textcolor{funSig}{\bfseries !}}}}1%
+    {?=}{{{\textcolor{funSig}{?=}}}}2%
+    {—}{{---}}1%
+    {→}{{$\rightarrow$}}1%
+    {≤}{{$\leq$}}1%
+    {≥}{{$\geq$}}1%
+    {λ}{{$\lambda$}}1%
+    {’}{{'}}1%
+    {‘}{{`}}1%
+    {“}{{``}}1%
+    {”}{{''}}1,
   showstringspaces=false,
   breaklines=true,
   numbers=left,
   numberstyle=\tiny\color{gray},
-  numbersep=8pt,
-  frame=single,
-  framesep=4pt,
-  rulecolor=\color{gray!30}
+  numbersep=4pt,
+  xleftmargin=2.2em,
+  framexleftmargin=2.2em,
+  frame=none,
+  aboveskip=4pt,
+  belowskip=4pt,
+  lineskip=-1pt
 }

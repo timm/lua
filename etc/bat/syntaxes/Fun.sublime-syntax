@@ -1,6 +1,6 @@
 %YAML 1.2
 ---
-# Sublime-syntax for the `fun` language (Lua-ish with fun/let/!/++).
+# Sublime-syntax for the `fun` language (Lua-ish with fun/let/!).
 name: Fun
 file_extensions:
   - fun
@@ -76,8 +76,6 @@ contexts:
   operators:
     - match: '!'
       scope: keyword.control.return.fun
-    - match: '\+\+'
-      scope: keyword.operator.concat.fun
     - match: '\?='
       scope: keyword.operator.condinit.fun
     - match: '\+=|-=|\*=|/='
