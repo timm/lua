@@ -23,6 +23,7 @@ class FunLexer(RegexLexer):
             (r"\blet\b", Keyword.Declaration),
             (r"!", Keyword),
             (r":=", Operator),
+            (r"\?=", Operator),
             (r"(==|~=|<=|>=|<|>|=)", Operator),
             (r"(\+|-|\*|/|//|%|\^|#|\.\.)", Operator),
             (words(("and", "or", "not", "if", "elseif", "else",

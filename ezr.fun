@@ -3,7 +3,7 @@
 the, help := {}, [[
 ezr.fun : explainable multi-objective optimization
 (c) 2026, Tim Menzies <timm@ieee.org>, MIT license
-  -b bins=4        num numeric split candidates
+  -b bins=2        num numeric split candidates
   -B Budget=50     initial building budget
   -C Check=5       final check budget
   -c cliffs=0.195  Cliff's delta threshold
@@ -27,15 +27,8 @@ fmt, mtype := string.format, math.type
 -- Type markers (strings; cheap compare + pretty-print).
 NUM, SYM, COLS, DATA, TREE := "Num","Sym","Cols","Data","Tree"
 
--- Per-column-type behavior (Num vs Sym splits).
-TEST := {
-  [NUM]= fun(cut): !fun(x): !x <= cut end end,
-  [SYM]= fun(cut): !fun(x): !x == cut end end}
-YES := {[NUM]="<=", [SYM]="=="}
-NO  := {[NUM]=">",  [SYM]="!="}
-
 -- Forward refs: defined below.
-let push, csv, add, o, build, leaf, nodes
+let push, csv, add, o, mid, build, leaf, nodes
 
 -- Snapshot global names before our code adds any.
 b4 := {}
@@ -87,7 +80,7 @@ sort := fun(t,f): table.sort(t, f); !t
 -- Sum f(x) over table.
 sum := fun(t,f):
   n := 0
-  for _,x in ipairs(t): n = n + f(x)
+  for _,x in ipairs(t): n += f(x)
   !n
 
 -- Python-style slice: t[lo..hi:step].
@@ -157,16 +150,16 @@ rogues := fun():
 -- Per-class update helpers, then a dispatching `add`.
 
 _num := fun(num, v, w):
-  num.n = num.n + w
+  num.n += w
   if (w < 0 and num.n <= 1):
     num.n, num.mu, num.m2 = 0, 0, 0
   else:
     err := v - num.mu
-    num.mu = num.mu + w * err / num.n
-    num.m2 = num.m2 + w * err * (v - num.mu)
+    num.mu += w * err / num.n
+    num.m2 += w * err * (v - num.mu)
 
 _sym := fun(sym, v, w):
-  sym.n = sym.n + w
+  sym.n += w
   sym.has[v] = w + (sym.has[v] or 0)
 
 _cols := fun(cols, row, w):
@@ -188,7 +181,7 @@ _data := fun(data, row, w):
           break
 
 add = fun(it, v, w):
-  w = w or 1
+  w ?= 1
   if (it.is == DATA): _data(it, v, w); !v
   if (it.is == COLS): _cols(it, v, w); !v
   if (v == "?"): !v
@@ -198,7 +191,7 @@ add = fun(it, v, w):
 
 -- Bulk add to summary (default new Num).
 adds := fun(values, num):
-  num = num or Num()
+  num ?= Num()
   for _,v in pairs(values or {}): add(num, v)
   !num
 
@@ -207,8 +200,14 @@ clone := fun(data, rows):
   !adds(rows or {}, Data({data.cols.names}))
 
 -- ## Query
+-- Centroid: mid of all columns.
+mids := fun(data):
+  data._mid = data._mid or
+              [mid(c) for _,c in ipairs(data.cols.all)]
+  !data._mid
+
 -- Central tendency (mean or mode).
-mid := fun(col):
+mid = fun(col):
   if (col.is == NUM): !col.mu end
   most, mode := -1, nil
   for v,n in pairs(col.has):
@@ -221,14 +220,8 @@ spread := fun(col):
     !col.n <= 1 and 0 or (max(0, col.m2)/(col.n-1)) ^ 0.5
   n := 0
   for _,v in pairs(col.has):
-    n = n - v/col.n * log(v/col.n, 2)
+    n -= v/col.n * log(v/col.n, 2)
   !n
-
--- Centroid: mid of all columns.
-mids := fun(data):
-  data._mid = data._mid or
-              [mid(c) for _,c in ipairs(data.cols.all)]
-  !data._mid
 
 -- Sigmoid normalization.
 norm := fun(col, v):
@@ -254,6 +247,13 @@ wins := fun(data):
      !floor(100 * (1 - r))
 
 -- ## Tree
+-- Per-column-type behavior (Num vs Sym splits).
+TEST := {
+  [NUM]= fun(cut): !fun(x): !x <= cut end end,
+  [SYM]= fun(cut): !fun(x): !x == cut end end}
+YES := {[NUM]="<=", [SYM]="=="}
+NO  := {[NUM]=">",  [SYM]="!="}
+
 -- Partition rows on test fn.
 split := fun(col, rows, fn, cut, test):
   lhs, rhs, L, R := Num(), Num(), {}, {}
@@ -335,8 +335,8 @@ cliffsDelta := fun(xs, ys):
   n, m := #xs, #ys
   ngt, nlt := 0, 0
   for _,v in ipairs(xs):
-    ngt = ngt + bisect(ys, v)
-    nlt = nlt + (m - bisect(ys, v + 1e-32))
+    ngt += bisect(ys, v)
+    nlt += (m - bisect(ys, v + 1e-32))
   !abs(ngt - nlt) / (n * m)
 
 -- Kolmogorov-Smirnov: max CDF gap.
@@ -402,7 +402,7 @@ eg["--csv"]= fun():
   n := 0
   for r in csv(the.f):
     if (n % 30 == 0): print(o(r)) end
-    n = n + 1
+    n += 1
 
 eg["--ranks"]= fun():
   dict := {}
@@ -484,7 +484,7 @@ main := fun():
   while (n <= #arg):
     k := arg[n]
     v := arg[n+1]
-    n = n + 1
+    n += 1
     if (eg[k]):
       randomseed(the.seed)
       eg[k]()
@@ -492,7 +492,7 @@ main := fun():
       for k1 in pairs(the):
         if (k == "-"..k1:sub(1,1)):
           the[k1] = thing(v)
-          n = n + 1
+          n += 1
 
 if ((arg[0] or ""):match"ezr%.fun"): main() end
 
