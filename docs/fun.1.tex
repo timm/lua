@@ -1,0 +1,481 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage[margin=1cm]{geometry}
+\usepackage{longtable,booktabs,array}
+\newcounter{none}
+\providecommand{\passthrough}[1]{#1}
+\providecommand{\tightlist}{\setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+\input{fun}
+
+\begin{document}
+
+\section{NAME}\label{name}
+
+\textbf{fun} --- transpile and run a \emph{fun} source file (a tiny
+Lua-targeted source language)
+
+\section{SYNOPSIS}\label{synopsis}
+
+\textbf{fun} \emph{FILE} {[}\emph{ARGS}\ldots{]}
+
+\section{DESCRIPTION}\label{description}
+
+\emph{fun} is a Lua-targeted source language whose transpiler is a
+single short Lua module (\passthrough{\lstinline!fun.lua!}). Source
+files use the \passthrough{\lstinline!.fun!} extension. The runner shim
+\passthrough{\lstinline!fun!} reads a \passthrough{\lstinline!.fun!}
+file, transpiles it to Lua via \passthrough{\lstinline!fun.lua!},
+executes the result with the remaining arguments visible in Lua's
+\passthrough{\lstinline!arg!} table, and forwards stdin/stdout/exit
+code.
+
+By the time the source reaches Lua, it \emph{is} Lua. \emph{fun} adds a
+small set of line-level rewrites that compile away --- no runtime layer.
+
+\section{QUICK START}\label{quick-start}
+
+\begin{lstlisting}[language=bash]
+./fun foo.fun arg1 arg2
+\end{lstlisting}
+
+Inside \passthrough{\lstinline!foo.fun!}:
+
+\begin{lstlisting}[language=Fun]
+#!/usr/bin/env ./fun
+-- vim: ft=fun
+
+let greet, sq
+
+greet = fun(name) ! "hello, "..name end
+sq    = fun(x)    ! x*x end
+
+print(greet("world"))
+print(sq(5))
+\end{lstlisting}
+
+\section{LANGUAGE}\label{language}
+
+\subsection{Keyword sugar}\label{keyword-sugar}
+
+{\def\LTcaptype{none} % do not increment counter
+\begin{longtable}[]{@{}lll@{}}
+\toprule\noalign{}
+\emph{fun} & Lua & Notes \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\passthrough{\lstinline!fun!} & \passthrough{\lstinline!function!} &
+word-boundary substitution \\
+\passthrough{\lstinline!let!} & \passthrough{\lstinline!local!} &
+word-boundary substitution \\
+\passthrough{\lstinline"!"} & \passthrough{\lstinline!return!} & sigil;
+emits \passthrough{\lstinline!return!} + RHS \\
+\end{longtable}
+}
+
+Substitutions are line-level. Strings (\passthrough{\lstinline!"..."!},
+\passthrough{\lstinline!'...'!}, \passthrough{\lstinline![[...]]!}) and
+trailing \passthrough{\lstinline!--!} comments are hidden before
+substitution and restored after, so \passthrough{\lstinline'"!"'} and
+other token-like contents survive unchanged.
+
+\subsection{Control flow}\label{control-flow}
+
+\passthrough{\lstinline!if!} and \passthrough{\lstinline!elseif!}
+\textbf{require parentheses} around the condition; the transpiler
+injects \passthrough{\lstinline!then!}. \passthrough{\lstinline!end!}
+and \passthrough{\lstinline!do!} are written literally.
+
+\begin{lstlisting}[language=Fun]
+if (x > 0)
+  print("pos")
+elseif (x < 0)
+  print("neg")
+else
+  print("zero")
+end
+\end{lstlisting}
+
+\passthrough{\lstinline!for!}, \passthrough{\lstinline!while!},
+\passthrough{\lstinline!repeat ... until!} use plain Lua syntax
+(\passthrough{\lstinline!do!}/\passthrough{\lstinline!end!} explicit, no
+sugar).
+
+\subsection{Function definitions}\label{function-definitions}
+
+\passthrough{\lstinline!fun NAME(args) ... end!} works like Lua's
+\passthrough{\lstinline!function!}:
+
+\begin{lstlisting}[language=Fun]
+fun sq(n) ! n*n end
+fun NUM.mid(i) ! i.mu end
+\end{lstlisting}
+
+Anonymous: \passthrough{\lstinline!fun(args) ... end!}.
+
+Named-as-local: combine with \passthrough{\lstinline!let!}:
+
+\begin{lstlisting}[language=Fun]
+let helper = fun(x) ! x+1 end
+\end{lstlisting}
+
+A trailing \passthrough{\lstinline!=!} on a
+\passthrough{\lstinline!fun(args)!} line is silently stripped (so an old
+\passthrough{\lstinline!name = fun(args) =!} style still parses).
+
+\subsection{\texorpdfstring{Conditional init:
+\texttt{?=}}{Conditional init: ?=}}\label{conditional-init}
+
+\begin{lstlisting}[language=Fun]
+x ?= 42      -- if x == nil then x = 42 end
+\end{lstlisting}
+
+Statement-only; must start the line (optional indent allowed).
+
+\subsection{Compound assignment}\label{compound-assignment}
+
+\begin{lstlisting}[language=Fun]
+x += 1       -- x = x + 1
+y -= 2       -- y = y - 2
+z *= 3       -- etc.
+w /= 4
+\end{lstlisting}
+
+Operators: \passthrough{\lstinline!+= -= *= /=!}. \textbf{LHS must be a
+single word} (\passthrough{\lstinline!\%w+!}) and \textbf{RHS must be
+one whitespace-separated token} (\passthrough{\lstinline!\%S+!}).
+
+\subsection{Line continuation}\label{line-continuation}
+
+A trailing \passthrough{\lstinline!\\!} joins the next line; the
+joined-from physical line is replaced with a blank to \textbf{preserve
+line numbers} for error reporting.
+
+\begin{lstlisting}[language=Fun]
+let result = some_function(arg1, arg2, \
+                           arg3, arg4)
+\end{lstlisting}
+
+This is the \textbf{only} way to span constructs across physical lines
+for features whose regex is per-line --- see \emph{one-line constraints}
+below.
+
+\subsection{Comprehensions}\label{comprehensions}
+
+\begin{lstlisting}[language=Fun]
+let squares = [x*x for x in xs]
+let evens   = [x   for x in xs if x % 2 == 0]
+\end{lstlisting}
+
+Compiles to an inline IIFE (immediately invoked function expression). If
+\passthrough{\lstinline!iter!} contains no \passthrough{\lstinline!(!},
+the transpiler wraps:
+
+\begin{itemize}
+\tightlist
+\item
+  single loop var → \passthrough{\lstinline!for \_,v in ipairs(iter)!}
+\item
+  comma in loop var → \passthrough{\lstinline!for k,v in pairs(iter)!}
+\end{itemize}
+
+If \passthrough{\lstinline!iter!} already contains
+\passthrough{\lstinline!(!}, it passes through verbatim.
+
+\subsection{Strings and comments}\label{strings-and-comments}
+
+\begin{itemize}
+\tightlist
+\item
+  \passthrough{\lstinline!--!} starts a single-line comment.
+\item
+  \passthrough{\lstinline!--[[ ... ]]!} is a long comment.
+\item
+  \passthrough{\lstinline![[ ... ]]!} is a long string (multi-line,
+  \textbf{no interpolation}).
+\item
+  \passthrough{\lstinline!"..."!}, \passthrough{\lstinline!'...'!} are
+  regular strings (\textbf{no interpolation}).
+\item
+  All string contents protected from substitution.
+\end{itemize}
+
+\subsection{Shebang}\label{shebang}
+
+\passthrough{\lstinline"\#!/usr/bin/env ./fun"} on line 1 makes the file
+directly executable; the transpiler converts the shebang to a Lua
+comment before loading.
+
+\section{OPTIONS}\label{options}
+
+The \passthrough{\lstinline!fun!} runner takes no flags of its own. The
+first positional argument is the \passthrough{\lstinline!.fun!} file;
+remaining arguments are forwarded to the script via
+\passthrough{\lstinline!arg[1]!}, \passthrough{\lstinline!arg[2]!},
+\ldots{} \passthrough{\lstinline!arg[0]!} is set to the script path.
+
+\section{FILES}\label{files}
+
+\begin{itemize}
+\tightlist
+\item
+  \passthrough{\lstinline!fun.lua!} --- the transpiler (a single Lua
+  module).
+\item
+  \passthrough{\lstinline!fun!} --- the runner shim
+  (\passthrough{\lstinline"\#!/usr/bin/env lua"}).
+\item
+  \passthrough{\lstinline!*.fun!} --- \emph{fun} source files.
+\item
+  \passthrough{\lstinline!etc/funlexer.py!} --- Pygments lexer
+  (\passthrough{\lstinline!FunLexer!}).
+\item
+  \passthrough{\lstinline!etc/funpdf.sh!} ---
+  \passthrough{\lstinline!.fun!} → PDF via pygmentize + pandoc +
+  pdflatex.
+\item
+  \passthrough{\lstinline!etc/syntax/fun.vim!} --- vim syntax (loaded
+  via \passthrough{\lstinline!etc/nvimfun.lua!}).
+\item
+  \passthrough{\lstinline!etc/nvimfun.lua!},
+  \passthrough{\lstinline!etc/nviminit.lua!} --- neovim filetype plugin.
+\end{itemize}
+
+\section{DIAGNOSTICS}\label{diagnostics}
+
+When the transpiled Lua fails to load, \passthrough{\lstinline!fun!}
+writes a 5-line window around the offending line (\textbf{transpiled}
+Lua, not source) to stderr, then errors out. Line numbers refer to
+\textbf{transpiled} Lua, but the blank-pad trick on
+\passthrough{\lstinline!\\!} joins keeps source and transpiled line
+numbers in lockstep, so the position usually points to the right
+physical source line.
+
+\section{ONE-LINE CONSTRAINTS}\label{one-line-constraints}
+
+The transpiler runs substitutions \textbf{per physical line}
+(\passthrough{\lstinline!src:gsub "[\^\\n]+"!}). Several constructs must
+therefore fit on one line. Workaround: use \passthrough{\lstinline!\\!}
+continuation.
+
+\subsection{\texorpdfstring{\texttt{if\ (...)} / \texttt{elseif\ (...)}
+--- one
+line}{if (...) / elseif (...) --- one line}}\label{if-...-elseif-...-one-line}
+
+The injection regex matches \passthrough{\lstinline!if!} (or
+\passthrough{\lstinline!elseif!}) followed by a balanced-paren
+expression on the same line. Multi-line conditions need
+\passthrough{\lstinline!\\!}:
+
+\begin{lstlisting}[language=Fun]
+-- ✗ broken — closing paren on next physical line
+if (very_long_condition_part1 and
+    very_long_condition_part2)
+  ...
+
+-- ✓ join with backslash
+if (very_long_condition_part1 and \
+    very_long_condition_part2)
+  ...
+\end{lstlisting}
+
+\subsection{List comprehensions --- one
+line}\label{list-comprehensions-one-line}
+
+\passthrough{\lstinline![expr for var in iter]!} (and the
+\passthrough{\lstinline!if!}-guarded form) must fit on one line. The
+regex stops at the first matching \passthrough{\lstinline!]!}.
+
+\begin{lstlisting}[language=Fun]
+-- ✗ broken — comprehension spans lines
+let xs = [transform(x)
+          for x in source]
+
+-- ✓ join with backslash
+let xs = [transform(x) \
+          for x in source]
+
+-- ✓ or extract the iterator first
+let it = source
+let xs = [transform(x) for x in it]
+\end{lstlisting}
+
+\subsection{\texorpdfstring{\texttt{?=} --- one line,
+statement-leading}{?= --- one line, statement-leading}}\label{one-line-statement-leading}
+
+Pattern: \passthrough{\lstinline!\^(\%s*)(\%w+)\%s*?=\%s*([\^;]+)!}.
+Indented allowed; the RHS runs up to \passthrough{\lstinline!;!} or
+end-of-line. Cannot follow other content on the same line.
+
+\subsection{\texorpdfstring{Compound
+\texttt{+=}/\texttt{-=}/\texttt{*=}/\texttt{/=} --- one word
+LHS}{Compound +=/-=/*=//= --- one word LHS}}\label{compound---one-word-lhs}
+
+\passthrough{\lstinline!(\%w+)\%s*([\%+\%-\%*/])=\%s+(\%S+)!}. Both
+sides constrained:
+
+\begin{itemize}
+\tightlist
+\item
+  LHS is a single \passthrough{\lstinline!\%w+!} --- \textbf{no fields
+  or indexing}. \passthrough{\lstinline!obj.field += 1!} and
+  \passthrough{\lstinline!t[i] += 1!} do \textbf{not} transform.
+\item
+  RHS is \textbf{one} whitespace-separated token
+  (\passthrough{\lstinline!\%S+!}). \passthrough{\lstinline!x += a + b!}
+  captures only \passthrough{\lstinline!a!}; the rest leaks.
+\end{itemize}
+
+Workaround: write the expansion by hand or wrap RHS in parens with no
+internal whitespace --- \passthrough{\lstinline!x += (a+b)!} works
+because \passthrough{\lstinline!(a+b)!} is one token.
+
+\subsection{\texorpdfstring{Comprehension iterator with \texttt{{]}}
+inside}{Comprehension iterator with {]} inside}}\label{comprehension-iterator-with-inside}
+
+The regex stops at the \textbf{first} \passthrough{\lstinline!]!}. If
+\passthrough{\lstinline!iter!} contains a literal
+\passthrough{\lstinline!]!} (e.g.~inside a Lua character class), the
+regex closes early:
+
+\begin{lstlisting}[language=Fun]
+-- ✗ broken — `]` inside "[^,]+" closes the comprehension
+let t = [l.thing(x) for x in s:gmatch"[^,]+"]
+\end{lstlisting}
+
+Workaround: bind the iterator first.
+
+\begin{lstlisting}[language=Fun]
+let it = s:gmatch"[^,]+"
+let t  = [l.thing(x) for x in it]
+\end{lstlisting}
+
+\section{OTHER QUIRKS}\label{other-quirks}
+
+\subsection{\texorpdfstring{\texttt{!} substitutes everywhere outside
+strings/comments}{! substitutes everywhere outside strings/comments}}\label{substitutes-everywhere-outside-stringscomments}
+
+\passthrough{\lstinline"!"} is a literal global substitution to
+\passthrough{\lstinline!return!} (with trailing space). Lua identifiers
+can't contain \passthrough{\lstinline"!"}, so accidental damage is rare,
+\textbf{but}:
+
+\begin{itemize}
+\tightlist
+\item
+  \passthrough{\lstinline"!="} becomes
+  \passthrough{\lstinline!return =!} --- broken. Use Lua's
+  \passthrough{\lstinline!\~=!} for not-equal.
+\item
+  \passthrough{\lstinline"not !x"} becomes
+  \passthrough{\lstinline!not return x!} --- broken. Just write
+  \passthrough{\lstinline!not x!}.
+\item
+  \passthrough{\lstinline"if (x != y)"} is \textbf{wrong}; write
+  \passthrough{\lstinline!if (x \~= y)!}.
+\end{itemize}
+
+\subsection{\texorpdfstring{\texttt{fun} and \texttt{let} use word
+boundaries}{fun and let use word boundaries}}\label{fun-and-let-use-word-boundaries}
+
+Frontier patterns \passthrough{\lstinline!\%f[\%w\_]fun\%f[\%W]!} and
+\passthrough{\lstinline!\%f[\%w\_]let\%f[\%W]!}. So:
+
+\begin{itemize}
+\tightlist
+\item
+  \passthrough{\lstinline!letx!} is \textbf{not} touched (no boundary).
+\item
+  \passthrough{\lstinline!myfun!} is \textbf{not} touched.
+\item
+  \passthrough{\lstinline!funny!} is \textbf{not} touched
+  (\passthrough{\lstinline!y!} extends word).
+\item
+  \passthrough{\lstinline!fun(!} and \passthrough{\lstinline!fun!} and
+  \passthrough{\lstinline!let!} are transformed.
+\end{itemize}
+
+\subsection{\texorpdfstring{String hiding does not handle
+\texttt{\textbackslash{}"}-escaped
+quotes}{String hiding does not handle \textbackslash"-escaped quotes}}\label{string-hiding-does-not-handle--escaped-quotes}
+
+The hiding regex is \passthrough{\lstinline!'"[\^"]*"'!}. Strings
+containing escaped quotes break the hiding:
+
+\begin{lstlisting}[language=Fun]
+let bad = "she said \"hi\""    -- hiding misparses this
+\end{lstlisting}
+
+Workaround: use single quotes, \passthrough{\lstinline![[...]]!}, or
+split into pieces with Lua's \passthrough{\lstinline!..!} concat.
+
+\subsection{Method dispatch on plain
+tables}\label{method-dispatch-on-plain-tables}
+
+Plain Lua tables have no methods. \passthrough{\lstinline!xs:remove(n)!}
+is \textbf{not} sugar for \passthrough{\lstinline!table.remove(xs, n)!}
+--- Lua looks for a \passthrough{\lstinline!remove!} field and errors.
+Use \passthrough{\lstinline!table.remove(xs, n)!} or alias at top:
+\passthrough{\lstinline!let tremove = table.remove!}.
+
+\subsection{No string interpolation
+anywhere}\label{no-string-interpolation-anywhere}
+
+Neither \passthrough{\lstinline!"..."!},
+\passthrough{\lstinline!'...'!}, nor \passthrough{\lstinline![[...]]!}
+interpolate \passthrough{\lstinline!\{var\}!}. Build strings with Lua's
+\passthrough{\lstinline!..!} concat.
+
+\subsection{Long strings span multiple lines
+safely}\label{long-strings-span-multiple-lines-safely}
+
+\passthrough{\lstinline![[...]]!} blocks are extracted from the whole
+source before line-by- line processing, so multi-line long strings (and
+blank lines inside them) work fine.
+
+\subsection{Comments are passed through
+verbatim}\label{comments-are-passed-through-verbatim}
+
+A trailing \passthrough{\lstinline!--!} comment is split off before
+substitution and re- appended after, so anything inside a comment
+survives unchanged.
+
+\section{EXAMPLE}\label{example}
+
+\begin{lstlisting}[language=Fun]
+#!/usr/bin/env ./fun
+-- vim: ft=fun
+
+let Num, add
+
+Num = fun(s,n) ! {name=s, at=n, n=0, mu=0, m2=0, sd=0} end
+
+add = fun(c, v)
+  c.n += 1
+  let d = v - c.mu
+  c.mu += d / c.n
+  c.m2 += d * (v - c.mu)
+  c.sd  = c.n < 2 and 0 or (c.m2 / (c.n - 1)) ^ 0.5
+  ! c
+end
+
+-- comprehension: build cumulative stats
+let xs = [add(Num("x",0), v) for v in {1,2,3,4,5}]
+print(xs[#xs].mu, xs[#xs].sd)
+\end{lstlisting}
+
+\section{SEE ALSO}\label{see-also}
+
+\passthrough{\lstinline!lua(1)!}, \passthrough{\lstinline!pairs(3)!},
+\passthrough{\lstinline!ipairs(3)!},
+\passthrough{\lstinline!pygmentize(1)!},
+\passthrough{\lstinline!pandoc(1)!}
+
+\section{AUTHORS}\label{authors}
+
+Tim Menzies \href{mailto:timm@ieee.org}{\nolinkurl{timm@ieee.org}}, with
+iterative collaboration.
+
+\end{document}

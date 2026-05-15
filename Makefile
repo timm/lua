@@ -46,8 +46,9 @@ sh: ## start up my own IDE
 	@echo '  ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠓⢤⣀⠀⠀⠀⠀⠀⠀⣀⡤⠞⠁⠀⣰⣆⠀⠀⠀⠀⠀⠀'
 	@echo '  ⠀⠀⠀⠀⠀⠘⠿⠀⠀⠀⠀⠀⠈⠉⠙⠒⠒⠛⠉⠁⠀⠀⠀⠉⢳⡞⠉⠀⠀⠀⠀⠀'
 	@echo '  ⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀'
-	@printf "$(CYAN)\n  Shoot for the moon. Even if you miss,\n"
-	@printf "  you’ll land among the stars\n  — Les Brown\n\n$(RESET)"
+	@printf "$(CYAN)\n'We choose to go to the moon... and do\n"
+	@printf "the other things, not because they are easy,\n"
+	@printf "but because they are hard.'  -- JFK\n\n$(RESET)"
 	@I=$I bash --init-file $I/etc/bash.rc -i
  
 HTML = ~/tmp/html

@@ -26,7 +26,15 @@ bind '"\e[A": history-search-backward'
 bind '"\e[B": history-search-forward'
 
 # ---- prompt --------------------------------------------------------------
-PS1='🌙 $(basename $(dirname $PWD))/$(basename $PWD) $ '
+__git_ps1_min() {
+  local b d
+  b=$(git symbolic-ref --short HEAD 2>/dev/null) || return
+  d=""
+  [ -n "$(git status --porcelain 2>/dev/null)" ] \
+    && d=$'\e[1;31m*\e[33m'
+  printf ' (\e[33m%s%s\e[0m)' "$b" "$d"
+}
+PS1='🌙 $(basename $(dirname $PWD))/$(basename $PWD)$(__git_ps1_min) $ '
 
 # ---- aliases -------------------------------------------------------------
 alias vi='nvim -u $GIT_ROOT/etc/nviminit.lua  -p'
