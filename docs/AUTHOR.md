@@ -25,7 +25,7 @@
   <file>.fun            source files
   Makefile              `make repl-check`, `make solutions`, ...
   docs/
-    README.md           site home (Jekyll renders as index)
+    index.md            site home (Jekyll convention)
     AUTHOR.md           this file (authoring conventions)
     syllabus.md         3-week-block schedule, dep graph
     glossary.md         canonical concepts (by category, then alphabetical)
@@ -107,7 +107,7 @@ repl_prompts: <count>     # target ~80
 
 **Source:** [`<file>.fun`](../<file>.fun)
 **See also:** [glossary](glossary.md) · [syllabus](syllabus.md)
-**Prerequisite:** ran `make install` (see [README](README.md))
+**Prerequisite:** ran `make install` (see [home](index.md))
 
 ## Big picture
 1 paragraph. The whole topic in plain English. Why care.
@@ -208,7 +208,7 @@ Don't write "before running, what do you think?" prompts that the
 runner can't verify. Such reflection is for class discussion only,
 not the doc.
 
-## 7. README.md (site home) schema
+## 7. index.md (site home) schema
 
 ```markdown
 ![License](https://img.shields.io/badge/license-MIT-blue)

@@ -14,7 +14,7 @@ repl_prompts: 0
 
 **Source:** [`nb.fun`](../nb.fun)
 **See also:** [glossary](glossary.md) · [syllabus](syllabus.md)
-**Prerequisite:** ran `make install` (see [README](README.md));
+**Prerequisite:** ran `make install` (see [home](index.md));
 read [ezr.md](ezr.md) first
 
 ## Big picture

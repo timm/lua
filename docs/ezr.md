@@ -14,7 +14,7 @@ repl_prompts: 0
 
 **Source:** [`ezr.fun`](../ezr.fun)
 **See also:** [glossary](glossary.md) · [syllabus](syllabus.md)
-**Prerequisite:** ran `make install` (see [README](README.md))
+**Prerequisite:** ran `make install` (see [home](index.md))
 
 ## Big picture
 
