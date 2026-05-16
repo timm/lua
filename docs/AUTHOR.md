@@ -10,12 +10,12 @@
   programmer, new to most ML concepts.
 - **Source language:** `fun` (a tiny Lua-targeted DSL, ~150-line
   transpiler in `fun.lua`).
-- **Lecture format:** Two 70-min lectures per night, same evening.
-  One `<file>.md` per night.
+- **Lecture format:** 3 weeks per topic. 3 nights/week, 1 lecture/night,
+  70 min each = **9 lectures (~10.5 hrs) per `<file>.md`**.
 - **Exercises:** Students port `.fun` to Python (via LLM). Goal is
   understanding the *concepts*, not the language.
-- **Exam:** Show a tagged `.fun` snippet with 3 seeded bugs. Student
-  explains tags, finds bugs, explains effect of each, proposes fix.
+- **Exam:** Tagged `.fun` snippet with 3 seeded bugs. Student
+  explains concepts, finds bugs, explains effect of each, proposes fix.
 
 ## 1. Site layout
 
@@ -23,12 +23,12 @@
 /                       repo root
   README.md             1-page summary + badges + link to docs/
   <file>.fun            source files
-  AUTHOR.md             this file
   Makefile              `make repl-check`, `make solutions`, ...
   docs/
     README.md           site home (Jekyll renders as index)
-    syllabus.md         week-by-week schedule, dep graph
-    glossary.md         canonical concepts (alphabetical)
+    AUTHOR.md           this file (authoring conventions)
+    syllabus.md         3-week-block schedule, dep graph
+    glossary.md         canonical concepts (by category, then alphabetical)
     <file>.md           per-source walkthrough + REPL
     fun.1.md            language reference
     img/                figures (PNG / SVG)
@@ -39,60 +39,65 @@
 All URLs **relative**. Docs must be readable on a local clone with
 no server.
 
-## 2. Categories (11 prefixes)
+## 2. Categories
 
-```
-a  AI / algorithm theory          aBAYES, aLAPLACE, aGAUSS
-c  code / language idiom          cITER, cCLOS, cPRECEDENCE
-s  general SE pattern             sDISPATCH, sDRY, sSEPARATION
-t  this-codebase specific         tIS, tCM, tKLASSES
-b  gotcha / breakage              bDIVZERO, bMISSING, bSDZERO
-o  optimization (incl. perf)      oONLINE, oBISECT, oCACHE
-h  human factors                  hREADABLE, hEXPLAIN
-m  math / formal theory           mWELFORD, mPDF, mLOG
-l  limitations                    lCOLDSTART, lINDEPENDENCE
-e  evaluation / empirical         eTRAINTEST, eMETRICS
-r  references / history           rWELFORD1962, rCOHEN1988
-```
+Used only for grouping in glossary (sort key). No prefix in prose.
 
-## 3. Concept ID rules
+| Tag | Meaning |
+|-----|---------|
+| AI | algorithm theory |
+| code | language idiom |
+| SE | general SE pattern |
+| this-codebase | local convention |
+| gotcha | breakage |
+| optimization | perf or algo |
+| human | readability / explainability |
+| math | formal theory |
+| limit | known limitation |
+| eval | empirical / metrics |
 
-- Format: `<prefix><UPPERCASE>`, ≤10 chars total.
-- Mnemonic, not cryptic (`aLAPLACE`, not `aLAP`).
-- **One canonical ID per concept.** No synonyms in prose.
-  - Pick one: e.g. `aWARMSTART` (never alternate with "burn-in").
-- IDs are a contract once exams reference them. Renames cascade:
-  `git rebase` all docs in one commit.
-- Glossary additions are append-only after first release.
+## 3. Concept naming
+
+- **Identity = canonical phrase**, ≤4 words. Examples: "Bayes' rule",
+  "Welford's algorithm", "Laplace smoothing", "warm-start period".
+- **Citation = source location**, format `<filebase><line>` or
+  `<filebase><lo>-<hi>` for ranges. Examples: `nb40`, `ezr188-212`,
+  `fun.lua11-21`.
+- One canonical phrase per concept. **No synonyms in prose.**
+  Pick one and stick with it (e.g., "warm-start period" — never
+  "burn-in" or "cold-start window" elsewhere).
+- Citations may shift as code edits — bump them in the glossary.
+- Phrase renames cascade: `git grep && rebase` all docs in one commit.
+- Glossary entries: append-only after first release.
 
 ## 4. Glossary entry schema
 
 ```markdown
-## aLAPLACE
-**Category:** a (AI)
-**Aliases:** none (avoid: "smoothing", "add-k smoothing")
-**Defines:** Add-k smoothing for symbolic likelihoods:
-(count + k·prior) / (n + k). Prevents zero-probability for unseen
-feature values.
-**Why:** Naive Bayes assigns P=0 to any unseen feature×class pair;
-one zero kills the product.
-**Depends on:** aBAYES, aPRIOR
-**Used in:** [nb.md](nb.md#alaplace)
-**Refs:** Manning & Schütze 1999, §6.2
+## Bayes' rule
+**Category:** AI
+**Source:** nb40-55
+**Defines:** P(C|x) ∝ P(x|C)·P(C). Foundation for generative
+classification.
+**Why:** Need to invert observed→hidden probability.
+**Depends on:** prior probability, conditional probability
+**Used in:** [nb.md](nb.md#bayes-rule)
+**Refs:** Manning & Schütze 1999, §6.2; Mitchell 1997, §6.2
 **Added:** 2026-05
 ```
 
-Alphabetical by ID within `glossary.md`.
+Sort: by category, then alphabetical by phrase within category.
+**Refs live inside the entry — no separate references file.**
 
 ## 5. `<file>.md` schema
 
 ```markdown
 ---
-title: <file> — <short description>
-nav_order: <integer, week order>
+title: <file> — <subject>
+nav_order: <integer>
 prereqs: [<file1>, <file2>]
-new_concepts: <count>
+new_concepts: <count>     # target ~45
 reused_concepts: <count>
+repl_prompts: <count>     # target ~80
 ---
 
 ![License](https://img.shields.io/badge/license-MIT-blue)
@@ -104,79 +109,72 @@ reused_concepts: <count>
 **See also:** [glossary](glossary.md) · [syllabus](syllabus.md)
 **Prerequisite:** ran `make install` (see [README](README.md))
 
+## Big picture
+1 paragraph. The whole topic in plain English. Why care.
+
 ## Problem
-One paragraph. What task. What input → output.
+What task. What input → output. Concrete.
 
 ## Approach
 2-3 sentences. High-level strategy + key trade-off.
 
 ## Architecture
-
 ASCII flow diagram. Show data + control.
 
 ## Key structures
-- bulleted list, 3-5 items, one line each
+Bulleted list, 3-5 items, one line each.
 
 ## Walkthrough
+Order: simple → complex. ~9 sub-sections (one per lecture).
 
-### <Section name>
+### Lecture 1 — <Section name>
 
 ```fun
-<5-15 lines of source, copy-pasted verbatim>
+<5-15 lines verbatim, line numbers visible>
 ```
 
-Prose explaining the snippet. Tags inline: [`aBAYES`].
+Prose explaining the snippet. First mention of a concept links to
+glossary using the canonical phrase:
 
-First mention of any concept emits a callout:
+[Bayes' rule](glossary.md#bayes-rule) says posterior is
+proportional to likelihood × prior.
 
-> [!NOTE]
-> **aBAYES** (a) — Bayes' rule: P(C|x) ∝ P(x|C)·P(C). Foundation
-> for generative classification.
-> See [glossary](glossary.md#abayes).
-
-Concepts introduced in earlier files (per `nav_order`) get a
-reused callout instead:
+Reused-from-earlier-file mention uses a callout:
 
 > [!TIP]
-> **aBAYES** — previously seen in [nb.md](nb.md#abayes). Reminder:
-> Bayes' rule for class probability.
+> Recall [Welford's algorithm](glossary.md#welfords-algorithm)
+> from [ezr.md](ezr.md). Same online-mean trick applies here.
 
-[Repeat for each section: Classes / Update / Query / Stats / Demo]
+REPL prompts interspersed (per-file numbering, restart at [1]):
 
-## REPL session
+    [1]> ./fun nb.fun --the
+    {file=diabetes.csv, ...}
 
-> [!TIP]
-> Run these prompts. Match the output. Then port the logic to
-> Python in your solutions directory.
+[Repeat for 9 lectures: ~5 new concepts + ~9 prompts each.]
 
-    [1]> ./fun <file>.fun --the
-    {Budget=50, Check=5, ...}
-
-    [2]> ./fun <file>.fun --tree
-    ...
-
-(Per-file numbering. 10-30 prompts. Mix bands:
-  Run / Predict / Modify — see §6.)
-
-## Limitations & gotchas
-- `lCOLDSTART` — Naive Bayes assigns P=0 to first instance of any
-  unseen class. Mitigation: burn-in period.
-- `bDIVZERO` — Welford guard for n=1.
+## Limitations
+- Naive Bayes assumes feature independence — fails on correlated
+  features.
+- Cold start: P=0 for first instance of unseen class
+  (mitigated by warm-start period).
 
 ## Shortcuts made
 - "We use string markers for type dispatch; production code might
   use metatables."
-- "Confusion matrix recorded only after `wait` rows; not a holdout."
+- "Confusion matrix only after `wait` rows; not a holdout."
 
 ## Exercises
 
-### Night 1 — prompts [1] through [15]
+### Week 1 — prompts [1]-[27]
 Port each prompt to Python. Match output. Submit `<file>_part1.py`.
 
-### Night 2 — prompts [16] through [30]
-Same, plus: implement the modify-band prompts (varying k, m, ...)
-and explain the observed shifts. Submit `<file>_part2.py` +
-`<file>_notes.md`.
+### Week 2 — prompts [28]-[54]
+Same, plus first round of modify-band prompts. Submit
+`<file>_part2.py`.
+
+### Week 3 — prompts [55]-[80]
+Final modify-band prompts; explain observed shifts in
+`<file>_notes.md`. Submit `<file>_part3.py` + notes.
 
 ### Self-check
 Answers in `<file>_test.zip` (password: see LMS).
@@ -185,17 +183,20 @@ Answers in `<file>_test.zip` (password: see LMS).
 ## 6. REPL prompt design
 
 ### Numbering
-- Per-file, starting at `[1]>`.
-- Cross-doc references use file prefix: `nb[12]>` in support /
+- Per-file, starting at `[1]>`. **~80 prompts per `<file>.md`.**
+- ~9 prompts per lecture (range 5-15).
+- Cross-doc references use file prefix: `nb[12]>` in support/
   discussion.
 
-### Bands (per Bloom's, collapsed)
-1. **Run** (Remember + Understand): "type and see"
-2. **Predict** (Apply + Analyze): show input, ask student to
-   predict output before running
-3. **Modify** (Evaluate + Create): change something, explain effect
+### Bands (Bloom's, collapsed) — target mix per doc
 
-Rough mix per file: ~5 Run, ~10 Predict, ~5 Modify (1:2:1).
+| Band | Count | What |
+|------|-------|------|
+| Run (Remember + Understand) | ~20 | type and see |
+| Predict (Apply + Analyze) | ~40 | predict output before running |
+| Modify (Evaluate + Create) | ~20 | change something, explain effect |
+
+Ratio 1:2:1.
 
 ### Determinism
 - First prompt should pin the seed if randomness is involved
@@ -226,14 +227,14 @@ make install
 ```
 
 ## Site map
-- [Syllabus](syllabus.md) — week-by-week + dependency graph
+- [Syllabus](syllabus.md) — 3-week blocks + dependency graph
 - [Glossary](glossary.md) — all concept definitions
 - Per-file walkthroughs:
   - [ezr.md](ezr.md) — decision tree learner
   - [nb.md](nb.md) — naive Bayes classifier
   - …
 - [fun.1.md](fun.1.md) — language reference
-- [AUTHOR.md](../AUTHOR.md) — authoring conventions
+- [AUTHOR.md](AUTHOR.md) — authoring conventions
 ```
 
 ## 8. syllabus.md schema
@@ -241,7 +242,8 @@ make install
 ```markdown
 # Syllabus
 
-Files are read in `nav_order`. Later files assume prior concepts
+3 weeks per `<file>.md`. 3 lectures/week, 70 min each.
+Files read in `nav_order`. Later files assume prior concepts
 unless explicitly re-introduced.
 
 ## Dependency graph
@@ -252,33 +254,34 @@ ezr ──→ nb ──→ active ──→ ...
 
 ## Schedule
 
-| Night | File | New concepts | Topics |
+| Weeks | File | New concepts | Topics |
 |-------|------|--------------|--------|
-| 1 | ezr | aONLINESTAT, mWELFORD, sDISPATCH, ... | decision tree |
-| 2 | nb  | aBAYES, aLAPLACE, aMEST, ... | naive Bayes |
-| ... | ... | ... | ... |
+| 1-3 | ezr | ~45 | decision tree, Welford, rank stats |
+| 4-6 | nb  | ~45 | Bayes, Laplace, m-est, warm-start |
+| 7-9 | ... | ... | ... |
 
 ## Pacing
-Two 70-min lectures per night. 8-12 new concepts/night absorbable;
-reused concepts (callout `[!TIP]`) free.
+~5 new concepts/lecture, ~45/doc absorbable. Reused concepts
+(callout `[!TIP]`) free. Past ~50 concepts/doc, students
+saturate — split into two docs if a topic naturally needs more.
 ```
 
 ## 9. Lint rules (enforced by `make repl-check`)
 
 1. Every REPL prompt re-runs in CI; output diffed against doc.
    Fail on drift.
-2. Every concept tag in `<file>.md` matches a glossary entry.
-   Fail if missing.
-3. Every glossary entry referenced at least once. Warn if orphan.
-4. First mention of a concept in a file uses `[!NOTE]`.
-   Later mentions in the same file use plain tag link (no callout).
-5. Reused-from-prior-file mentions use `[!TIP]`.
-6. **Warn on duplicate full callout** for an already-introduced
-   concept (within a file OR globally).
-7. No synonym appears in prose alongside a canonical ID
-   (e.g., "warm-start" prose AND `aWARMSTART` tag in same file).
-8. ≤10 chars per concept ID. Prefix is one of 11 valid categories.
-9. URLs are relative (no `https://` to internal docs).
+2. Every glossary-linked phrase in `<file>.md` resolves to a
+   glossary entry (`#bayes-rule` → entry `## Bayes' rule`).
+3. Every glossary entry referenced ≥ once in some `<file>.md`.
+   Warn on orphan.
+4. First mention of a concept in a file links to glossary; later
+   mentions in the same file are plain text (no repeated link).
+5. Reused-from-prior-file mentions use `[!TIP]` callout.
+6. No alias prose alongside the canonical phrase
+   (e.g., "burn-in" prose AND "warm-start period" link in same file).
+7. Phrase ≤4 words. Citation `<file><line>` or `<file><lo>-<hi>`
+   format; lint validates file exists and line range non-empty.
+8. URLs are relative for internal docs (no `https://` to internal).
 
 ## 10. Tone
 
@@ -294,8 +297,10 @@ Reference text for calibration: [K&R Ch1 prose](etc/kr_ch1.md)
 
 - Glossary entries: append-only after release. New `**Added:**`
   date per entry.
-- Concept renames: rebase all `<file>.md` and `glossary.md` in
+- Phrase renames: rebase all `<file>.md` and `glossary.md` in
   one commit. Don't fragment across PRs.
+- Citation drift (line numbers shifted): bump in glossary; lint
+  warns when file:line no longer points at expected concept.
 - REPL output changes: regenerate via test harness. CI lint
   catches drift.
 - Prose changes in `<file>.md`: free. No protocol.
@@ -403,9 +408,10 @@ Dream layout: Classes and Update on page 1. Achievable with
 
 - [ ] All REPL prompts run and match output (`make repl-check`)
 - [ ] No new concept missing a glossary entry
-- [ ] No synonym used alongside its canonical ID
-- [ ] First-mention callouts present; reuses use `[!TIP]`
+- [ ] No synonym used alongside its canonical phrase
+- [ ] First-mention links present; reuses use `[!TIP]`
 - [ ] Links are relative
 - [ ] Front-matter `nav_order` and `prereqs` set
+- [ ] `new_concepts` ≤ ~50; `repl_prompts` ~80
 - [ ] Image captions present
 - [ ] Tone scan: removed adjectives ("powerful", "easy", etc.)

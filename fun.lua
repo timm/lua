@@ -114,7 +114,8 @@ local function transpile(file)
     longs[#longs+1] = m; return "\2"..#longs.."\2"
   end)
   local out, stack = {}, {}
-  for raw in (src.."\n"):gmatch"([^\n]*)\n" do
+  for r in (src.."\n"):gmatch"([^\n]*)\n" do
+    local raw = r
     if raw:match"^%s*$" or raw:match"^%s*%-%-" then
       out[#out+1] = raw
     else
