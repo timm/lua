@@ -1,0 +1,11 @@
+source "https://rubygems.org"
+
+# Modern jekyll for local preview (Ruby 4.x compatible).
+# GH Pages production uses its own pinned jekyll via remote_theme.
+gem "jekyll", "~> 4.3"
+gem "jekyll-remote-theme"
+gem "jekyll-relative-links"
+gem "jekyll-seo-tag"
+gem "jekyll-sitemap"
+gem "jekyll-include-cache"  # required by just-the-docs
+gem "webrick"
