@@ -45,12 +45,14 @@ repl_prompts: 0
 ### Lecture 1 — <Section name>
 
 ```fun
-<!-- TODO: 5-15 lines from ezr.fun, line numbers visible -->
+-- @N,N,...        (from ezr.fun)
+<!-- TODO: 5-15 lines copied verbatim from ezr.fun -->
 ```
 
-<!-- TODO: prose linking to glossary, e.g.
-[Welford's algorithm](glossary.md#welfords-algorithm)
+<!-- TODO: prose linking to glossary by number-phrase slug, e.g.
+[#7 Welford's algorithm](glossary.md#7-welfords-algorithm)
 keeps mean/variance online without storing the data.
+Implemented in `add` above.
 -->
 
     [1]> ./fun ezr.fun --the

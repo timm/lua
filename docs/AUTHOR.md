@@ -58,34 +58,43 @@ Used only for grouping in glossary (sort key). No prefix in prose.
 
 ## 3. Concept naming
 
-- **Identity = canonical phrase**, ≤4 words. Examples: "Bayes' rule",
-  "Welford's algorithm", "Laplace smoothing", "warm-start period".
-- **Citation = source location**, format `<filebase><line>` or
-  `<filebase><lo>-<hi>` for ranges. Examples: `nb40`, `ezr188-212`,
-  `fun.lua11-21`.
+- **Identity = sequential integer.** First glossary entry is `1`,
+  second `2`, etc. Append-only. Numbers never reused, never resorted.
+- **Phrase = human label**, ≤4 words. "Bayes' rule",
+  "Welford's algorithm", "Laplace smoothing".
+- **Citation = function name(s)** in source — never line numbers.
+  Function names are refactor-stable; line numbers aren't.
+  Multiple functions allowed per entry: `classify, like, prior`.
 - One canonical phrase per concept. **No synonyms in prose.**
-  Pick one and stick with it (e.g., "warm-start period" — never
-  "burn-in" or "cold-start window" elsewhere).
-- Citations may shift as code edits — bump them in the glossary.
+- Tags in `.fun` source: one-line comment listing IDs that the
+  next code chunk illustrates. Format: `-- @23,44,61,100`.
+  Place above the function/section it tags.
+- Cross-doc links use slug `#<N>-<phrase-kebab>` (e.g.,
+  `glossary.md#23-bayes-rule`).
 - Phrase renames cascade: `git grep && rebase` all docs in one commit.
-- Glossary entries: append-only after first release.
+  Number stays the same — only the slug suffix changes.
+- Glossary entries: **append-only after first release. Never
+  renumber.** A retired concept gets a `**Status:** retired` line
+  but keeps its number forever.
 
 ## 4. Glossary entry schema
 
 ```markdown
-## Bayes' rule
+## 23. Bayes' rule
 **Category:** AI
-**Source:** nb40-55
+**Source:** functions `classify`, `like`, `prior` in `nb.fun`
 **Defines:** P(C|x) ∝ P(x|C)·P(C). Foundation for generative
 classification.
 **Why:** Need to invert observed→hidden probability.
-**Depends on:** prior probability, conditional probability
-**Used in:** [nb.md](nb.md#bayes-rule)
+**Depends on:** [#19 prior probability](glossary.md#19-prior-probability),
+[#21 conditional probability](glossary.md#21-conditional-probability)
+**Used in:** [nb.md](nb.md#23-bayes-rule)
 **Refs:** Manning & Schütze 1999, §6.2; Mitchell 1997, §6.2
 **Added:** 2026-05
 ```
 
-Sort: by category, then alphabetical by phrase within category.
+Sort order: **strict numeric, ascending** (1, 2, 3, ...). Categories
+are a *grouping label* on each entry, not a sort key.
 **Refs live inside the entry — no separate references file.**
 
 ## 5. `<file>.md` schema
@@ -129,20 +138,27 @@ Order: simple → complex. ~9 sub-sections (one per lecture).
 
 ### Lecture 1 — <Section name>
 
+Embed the relevant snippet **verbatim** so the reader doesn't hunt
+through the source file:
+
 ```fun
-<5-15 lines verbatim, line numbers visible>
+-- @23,44,61,100        (from nb.fun)
+classify= fun(row)
+  ...5-15 lines...
+  end
 ```
 
 Prose explaining the snippet. First mention of a concept links to
-glossary using the canonical phrase:
+glossary by **number-phrase slug**:
 
-[Bayes' rule](glossary.md#bayes-rule) says posterior is
-proportional to likelihood × prior.
+[#23 Bayes' rule](glossary.md#23-bayes-rule) says posterior is
+proportional to likelihood × prior. Implemented in `classify`
+above and `like`/`prior` (not shown).
 
 Reused-from-earlier-file mention uses a callout:
 
 > [!TIP]
-> Recall [Welford's algorithm](glossary.md#welfords-algorithm)
+> Recall [#7 Welford's algorithm](glossary.md#7-welfords-algorithm)
 > from [ezr.md](ezr.md). Same online-mean trick applies here.
 
 REPL prompts interspersed (per-file numbering, restart at [1]):
@@ -270,18 +286,24 @@ saturate — split into two docs if a topic naturally needs more.
 
 1. Every REPL prompt re-runs in CI; output diffed against doc.
    Fail on drift.
-2. Every glossary-linked phrase in `<file>.md` resolves to a
-   glossary entry (`#bayes-rule` → entry `## Bayes' rule`).
-3. Every glossary entry referenced ≥ once in some `<file>.md`.
-   Warn on orphan.
-4. First mention of a concept in a file links to glossary; later
+2. Glossary numbers are dense and monotonic: 1, 2, 3, ..., no gaps,
+   no duplicates, no out-of-order entries (except retired entries
+   which keep their slot).
+3. Every glossary-linked slug `#N-phrase` in `<file>.md` resolves
+   to an entry; the `N` and `phrase` must match the entry header.
+4. Every glossary entry referenced ≥ once in some `<file>.md`
+   OR appears in a `.fun` `-- @N,...` tag comment. Warn on orphan.
+5. Every `-- @N,N,...` tag in `.fun` source resolves to existing
+   glossary entries.
+6. Every `**Source:**` function name in glossary exists in the
+   referenced `.fun` file.
+7. First mention of a concept in a file links to glossary; later
    mentions in the same file are plain text (no repeated link).
-5. Reused-from-prior-file mentions use `[!TIP]` callout.
-6. No alias prose alongside the canonical phrase
+8. Reused-from-prior-file mentions use `[!TIP]` callout.
+9. No alias prose alongside the canonical phrase
    (e.g., "burn-in" prose AND "warm-start period" link in same file).
-7. Phrase ≤4 words. Citation `<file><line>` or `<file><lo>-<hi>`
-   format; lint validates file exists and line range non-empty.
-8. URLs are relative for internal docs (no `https://` to internal).
+10. Phrase ≤4 words.
+11. URLs are relative for internal docs (no `https://` to internal).
 
 ## 10. Tone
 
@@ -295,17 +317,23 @@ Reference text for calibration: [K&R Ch1 prose](etc/kr_ch1.md)
 
 ## 11. Update protocol
 
-- Glossary entries: append-only after release. New `**Added:**`
-  date per entry.
-- Phrase renames: rebase all `<file>.md` and `glossary.md` in
-  one commit. Don't fragment across PRs.
-- Citation drift (line numbers shifted): bump in glossary; lint
-  warns when file:line no longer points at expected concept.
+- Glossary entries: append-only. New entries get the next integer.
+  Never reuse, renumber, or reorder.
+- Retiring an entry: add `**Status:** retired (YYYY-MM)`. Number
+  stays. Citations and prose mentions removed in the same PR.
+- Phrase renames: rebase all `<file>.md`, `glossary.md`, and any
+  `.fun` `-- @N` comments in one commit. Don't fragment across PRs.
+  Slug suffix changes (`#23-bayes-rule` → `#23-bayes-theorem`);
+  number stays.
+- Function renames: bump `**Source:**` in glossary entry and any
+  `.fun` `-- @N` tag comments still referencing it (the tag itself
+  doesn't name the function; lint catches drift via §9 rule 6).
 - REPL output changes: regenerate via test harness. CI lint
   catches drift.
 - Prose changes in `<file>.md`: free. No protocol.
 - New file added: update `syllabus.md` nav_order + dep graph.
-- New concept added: glossary entry first, then reference.
+- New concept added: glossary entry first (next integer), then
+  reference from `.fun` (`-- @N`) and `.md` (slug link).
 
 ## 12. Solutions and tests
 

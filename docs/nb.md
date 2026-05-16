@@ -46,10 +46,14 @@ read [ezr.md](ezr.md) first
 ### Lecture 1 — <Section name>
 
 ```fun
-<!-- TODO: 5-15 lines from nb.fun -->
+-- @N,N,...        (from nb.fun)
+<!-- TODO: 5-15 lines copied verbatim from nb.fun -->
 ```
 
-<!-- TODO: prose linking to glossary -->
+<!-- TODO: prose linking to glossary by number-phrase slug, e.g.
+[#23 Bayes' rule](glossary.md#23-bayes-rule) says posterior is
+proportional to likelihood × prior. Implemented in `classify` above.
+-->
 
     [1]> ./fun nb.fun --the
     <!-- TODO: actual output -->
