@@ -25,6 +25,12 @@ PKGS ?= lua pygments pandoc gawk a2ps ghostscript luacheck pdflatex pycco bat
 install: ## install required tools (auto: brew/apt/dnf/pacman). vars: PKGS
 	@bash etc/install.sh $(PKGS)
 
+RUBY_BIN := $(firstword $(wildcard /opt/homebrew/opt/ruby/bin) \
+                          $(wildcard /usr/local/opt/ruby/bin))
+ifneq ($(RUBY_BIN),)
+  export PATH := $(RUBY_BIN):$(PATH)
+endif
+
 docs-install: docs/Gemfile ## install jekyll/just-the-docs gems for local preview
 	@ruby -e 'exit(RUBY_VERSION.split(".")[0].to_i >= 3)' || \
 	  (echo "Ruby 3+ required (have $$(ruby -v)). Install: brew install ruby" >&2; exit 1)
@@ -33,6 +39,16 @@ docs-install: docs/Gemfile ## install jekyll/just-the-docs gems for local previe
 
 docs-serve: docs-install ## preview docs at http://localhost:4000
 	@cd docs && bundle exec jekyll serve --baseurl '' --livereload
+
+serve: docs-install ## start jekyll preview in background (use 'make stop' to halt)
+	@pgrep -f "jekyll serve" >/dev/null && \
+	  echo "already running (pid $$(pgrep -f 'jekyll serve'))" || \
+	  (cd docs && nohup bundle exec jekyll serve --baseurl '' --livereload \
+	     > /tmp/jekyll.log 2>&1 & \
+	   sleep 3 && echo "serving at http://localhost:4000 (log: /tmp/jekyll.log)")
+
+stop: ## kill background jekyll server
+	@pkill -f "jekyll serve" && echo "stopped" || echo "not running"
 
 BLUE  := \033[34m
 YELLOW := \033[1;33m
