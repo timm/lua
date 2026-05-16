@@ -1,5 +1,7 @@
 title: ezr — Easy Explainable AI
 description: Multi-objective optimization in tiny Lua-DSL `fun`
+url: https://timm.github.io
+baseurl: /lua
 remote_theme: just-the-docs/just-the-docs
 plugins:
   - jekyll-remote-theme
