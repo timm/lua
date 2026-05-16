@@ -1,3 +1,8 @@
+---
+title: AUTHOR — Conventions
+nav_order: 98
+---
+
 # AUTHOR.md — Authoring Conventions for Course Docs
 
 > Spec for writing (and auto-generating) the per-file docs, glossary,

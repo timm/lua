@@ -1,5 +1,12 @@
 .DS_store
 
+# Jekyll docs preview
+docs/_site/
+docs/.jekyll-cache/
+docs/vendor/
+docs/Gemfile.lock
+docs/.bundle/
+
 # Compiled Lua sources
 luac.out
 

@@ -25,6 +25,15 @@ PKGS ?= lua pygments pandoc gawk a2ps ghostscript luacheck pdflatex pycco bat
 install: ## install required tools (auto: brew/apt/dnf/pacman). vars: PKGS
 	@bash etc/install.sh $(PKGS)
 
+docs-install: docs/Gemfile ## install jekyll/just-the-docs gems for local preview
+	@ruby -e 'exit(RUBY_VERSION.split(".")[0].to_i >= 3)' || \
+	  (echo "Ruby 3+ required (have $$(ruby -v)). Install: brew install ruby" >&2; exit 1)
+	@command -v bundle >/dev/null || gem install --user-install bundler
+	@cd docs && bundle config set --local path 'vendor/bundle' && bundle install
+
+docs-serve: docs-install ## preview docs at http://localhost:4000
+	@cd docs && bundle exec jekyll serve --baseurl '' --livereload
+
 BLUE  := \033[34m
 YELLOW := \033[1;33m
 CYAN := \033[1;36m
