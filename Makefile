@@ -101,7 +101,7 @@ LMargin ?= 1.5cm
 RMargin ?= 0.5cm
 
 .SECONDEXPANSION:
-%.pdf : $$(notdir $$*).fun Makefile etc/funpdf.sh
+%.xdf : $$(notdir $$*).fun Makefile etc/funpdf.sh
 	@bash etc/funpdf.sh "$<" "$@" "$(Cols)" "$(Font)" "$(Orient)" "$(Style)" "$(LMargin)" "$(RMargin)"
 	@open $@
 
