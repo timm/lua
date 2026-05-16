@@ -1,6 +1,8 @@
 title: ezr — Easy Explainable AI
 description: Multi-objective optimization in tiny Lua-DSL `fun`
-theme: just-the-docs
+remote_theme: just-the-docs/just-the-docs
+plugins:
+  - jekyll-remote-theme
 search_enabled: true
 heading_anchors: true
 color_scheme: light
