@@ -86,17 +86,29 @@ Used only for grouping in glossary (sort key). No prefix in prose.
 
 ```markdown
 ## 23. Bayes' rule
+
 **Category:** AI
+
 **Source:** functions `classify`, `like`, `prior` in `nb.fun`
+
 **Defines:** P(C|x) ∝ P(x|C)·P(C). Foundation for generative
 classification.
+
 **Why:** Need to invert observed→hidden probability.
+
 **Depends on:** [#19 prior probability](glossary.md#19-prior-probability),
 [#21 conditional probability](glossary.md#21-conditional-probability)
+
 **Used in:** [nb.md](nb.md#23-bayes-rule)
+
 **Refs:** Manning & Schütze 1999, §6.2; Mitchell 1997, §6.2
+
 **Added:** 2026-05
 ```
+
+**Blank line required between each `**Bold:**` field.** Without
+the blank, markdown treats them as a single paragraph and they
+render as one run-on line.
 
 Sort order: **strict numeric, ascending** (1, 2, 3, ...). Categories
 are a *grouping label* on each entry, not a sort key.

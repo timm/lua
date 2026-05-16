@@ -48,20 +48,24 @@ b4 := {}
 for k,_ in pairs(_ENV): b4[k] = true
 
 -- ## Classes
+-- @1
 -- Numeric column.
 Num := fun(at, txt):
   !{is=NUM, at=at or 0, txt=txt or "",
     n=0, mu=0, m2=0, sd=0}
 
+-- @2
 -- Symbolic (categorical) column.
 Sym := fun(at, txt):
   !{is=SYM, at=at or 0, txt=txt or "",
     n=0, has={}}
 
+-- @5
 -- Column factory: uppercase first letter → Num, else Sym.
 Col := fun(at, txt):
   !(txt:find"^[A-Z]" and Num or Sym)(at, txt)
 
+-- @5,6
 -- Names list -> column groups (x = independent, y = class).
 Cols := fun(names):
   all := {}
@@ -72,6 +76,7 @@ Cols := fun(names):
     if (c.txt:find"!$"): push(ys, c)
   !{is=COLS, names=names, all=all, x=xs, y=ys}
 
+-- @7
 -- Data container: rows + summarized columns.
 Data := fun(txt, src):
   data := {is=DATA, txt=txt or "", rows={}, cols=nil}
@@ -124,6 +129,7 @@ o = fun(x):
 thing := fun(s):
   !s == "true" or (s ~= "false" and (tonumber(s) or s))
 
+-- @9,10
 -- CSV iterator (returns coroutine-style function).
 csv = fun(src):
   f := io.open(src)
@@ -152,6 +158,7 @@ rogues := fun():
       print("rogue: "..k)
 
 -- ## Update
+-- @3
 _num := fun(num, v):
   if (v == "?"): !nil
   num.n += 1
@@ -175,6 +182,7 @@ _data := fun(data, row):
     push(data.rows, row)
     _cols(data.cols, row)
 
+-- @4
 add = fun(it, v):
   if (it.is == DATA): _data(it, v); !v
   if (it.is == COLS): _cols(it, v); !v
@@ -189,6 +197,7 @@ adds := fun(items, num):
     for _,v in ipairs(items): add(num, v)
   !num
 
+-- @8
 -- Clone: empty Data with same column structure.
 clone := fun(data, rows):
   d := Data(data.txt, nil)
@@ -198,11 +207,13 @@ clone := fun(data, rows):
   !d
 
 -- ### Bayes
+-- @13,16
 -- Symbolic likelihood: (count + k*prior) / (n + k).
 SYM_like := fun(sym, v, prior):
   n := (sym.has[v] or 0) + the.k * (prior or 0)
   !max(1/BIG, n / (sym.n + the.k + 1/BIG))
 
+-- @14
 -- Numeric likelihood: Gaussian.
 NUM_like := fun(num, v):
   z := 1/BIG
@@ -214,6 +225,7 @@ like := fun(col, v, prior):
   if (col.is == SYM): !SYM_like(col, v, prior)
   !NUM_like(col, v)
 
+-- @11,12,15,17,18
 -- Log-likelihood of row given a class data table.
 likes := fun(data, row, nall, nh):
   b := (#data.rows + the.m) / (nall + the.m * nh)
@@ -223,6 +235,7 @@ likes := fun(data, row, nall, nh):
            end)
   !log(b) + s
 
+-- @19,20,21,22
 -- Naive Bayes: online classify-then-train. Returns confusion matrix.
 nb := fun(data):
   klasses, cm := {}, {}
@@ -283,6 +296,7 @@ same := fun(xs, ys, eps):
   if (cliffsDelta(xs, ys) > 0.195): !false end
   !ks(xs, ys) <= 1.36 * ((n + m) / (n * m)) ^ 0.5
 
+-- @29,30
 -- Group treatments by statistical rank. dict[name] = list of scores.
 -- rank 1 = best lead + treatments `same` as it (pooled-sd eps).
 -- rank 2 = first treatment NOT same as rank-1 lead + same-as-IT.
@@ -305,6 +319,7 @@ sames := fun(dict):
     push(out, {name=nm, num=nums[nm], rank=rank})
   !out
 
+-- @23,24,25,26,27,28
 -- Build list of per-class stat rows from a confusion matrix.
 -- Returns: [{class, n, tn, fn, fp, tp, pd, pf, prec, acc}, ...]
 -- All percentages as rounded ints (0..100).
